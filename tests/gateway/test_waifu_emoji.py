@@ -49,6 +49,7 @@ def _make_stub(*, config, texts, images, error=None):
     stub._waifu_config = lambda _event: config
     stub.max_message_length_for_chat = lambda _chat_id: None
     stub.message_len_fn_for_chat = lambda _chat_id: len
+    stub._waifu_ledger_record = lambda **_kw: None  # ledger covered by test_waifu_ledger
 
     async def _fake_final(event, session_key, text, metadata, is_ephemeral, ttl, record):
         texts.append(text)

@@ -4314,11 +4314,12 @@ class BasePlatformAdapter(ABC):
     async def _send_waifu_sticker(
         self, event: MessageEvent, image_path: str, caption: str, metadata: Dict[str, Any], *,
         reply_to: Optional[str], ephemeral_ttl: int, record_delivery: Callable,
-    ) -> None:
+    ) -> "Optional[SendResult]":
         """Send one Waifu-Mode bubble as a native IMAGE (QQ ``msg_type=7``) via the platform's
         rich-media path; ``caption`` is the bubble's remaining text and may be empty. A raise or a
         refused send is logged and recorded, never raised into ``_notify_turn_error``; the series
-        continues so a single bad sticker cannot silence the rest of the turn."""
+        continues so a single bad sticker cannot silence the rest of the turn. Returns the send
+        result (``None`` when the send raised) so the caller can ledger it."""
         try:
             result = await self.send_image_file(
                 chat_id=event.source.chat_id, image_path=image_path,
@@ -4326,12 +4327,37 @@ class BasePlatformAdapter(ABC):
         except Exception as exc:
             logger.error("[%s] waifu sticker send raised: %s", self.name, exc, exc_info=True)
             record_delivery(SendResult(success=False, error=str(exc)))
-            return
+            return None
         record_delivery(result)
         if ephemeral_ttl and ephemeral_ttl > 0 and result.success and result.message_id:
             self._schedule_ephemeral_delete(event.source.chat_id, result.message_id, ephemeral_ttl)
         if not result.success:
             logger.warning("[%s] waifu sticker failed: %s", self.name, getattr(result, "error", None))
+        return result
+
+    def _waifu_ledger_record(
+        self, *, session_key: str, index: int, total: int, kind: str, chars: int,
+        result: Optional[SendResult],
+    ) -> None:
+        """Append one delivery line to the Waifu-Mode ledger (see ``waifu_ledger``).
+
+        Delivery metadata only — never the chat text. A ledger failure is debug-logged and
+        swallowed so the audit trail can never break a real send."""
+        try:
+            from gateway.platforms.waifu_ledger import append_waifu_ledger
+            append_waifu_ledger({
+                "ts": time.time(),
+                "session_key": session_key,
+                "index": index,
+                "total": total,
+                "kind": kind,
+                "chars": chars,
+                "success": bool(result is not None and result.success),
+                "message_id": getattr(result, "message_id", None),
+                "error": getattr(result, "error", None),
+            })
+        except Exception:
+            logger.debug("[%s] waifu ledger append failed", self.name, exc_info=True)
 
     async def _send_waifu_series(
         self, event: MessageEvent, session_key: str, text_content: str, metadata: Dict[str, Any], *,
@@ -4372,9 +4398,12 @@ class BasePlatformAdapter(ABC):
                 image_path, _caption = waifu_emoji_send(bubble, emojis)
                 if image_path is not None:
                     if os.path.isfile(image_path):
-                        await self._send_waifu_sticker(
+                        sticker_result = await self._send_waifu_sticker(
                             event, image_path, _caption, metadata, reply_to=reply_to,
                             ephemeral_ttl=ephemeral_ttl, record_delivery=record_delivery)
+                        self._waifu_ledger_record(
+                            session_key=session_key, index=index, total=len(bubbles),
+                            kind="sticker", chars=len(_caption), result=sticker_result)
                         continue
                     logger.warning("[%s] waifu emoji image missing for bubble %d/%d: %s",
                                    self.name, index, len(bubbles), image_path)
@@ -4391,9 +4420,16 @@ class BasePlatformAdapter(ABC):
                     # A raised send must not escape into _notify_turn_error; record and stop.
                     logger.error("[%s] waifu bubble %d/%d raised: %s", self.name, index, len(bubbles), exc,
                                  exc_info=True)
-                    record_delivery(SendResult(success=False, error=str(exc)))
+                    failed = SendResult(success=False, error=str(exc))
+                    record_delivery(failed)
+                    self._waifu_ledger_record(
+                        session_key=session_key, index=index, total=len(bubbles), kind="text",
+                        chars=len(chunk), result=failed)
                     return
                 record_delivery(result)
+                self._waifu_ledger_record(
+                    session_key=session_key, index=index, total=len(bubbles), kind="text",
+                    chars=len(chunk), result=result)
                 if ephemeral_ttl and ephemeral_ttl > 0 and result.success and result.message_id:
                     delivery_adapter._schedule_ephemeral_delete(
                         event.source.chat_id, result.message_id, ephemeral_ttl)

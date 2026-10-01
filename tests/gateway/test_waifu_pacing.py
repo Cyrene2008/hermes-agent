@@ -42,6 +42,7 @@ def _make_stub(*, config, sends, guard=None, session_key="sk"):
     stub._waifu_config = lambda _event: config
     stub.max_message_length_for_chat = lambda _chat_id: None
     stub.message_len_fn_for_chat = lambda _chat_id: len
+    stub._waifu_ledger_record = lambda **_kw: None  # ledger covered by test_waifu_ledger
     if guard is not None:
         stub._active_sessions = {session_key: guard}
 
