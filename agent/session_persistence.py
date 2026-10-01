@@ -273,6 +273,62 @@ def _db_flush_write(agent, batch_rows: List[Dict[str, Any]], batch_msgs: List[Di
         drop_shadowed_checkpoints(messages)
 
 
+def _waifu_series_enabled(agent) -> bool:
+    """``waifu.enabled`` for this agent, cached once; any config read failure reads OFF."""
+    cached = getattr(agent, "_waifu_series_enabled_cache", None)
+    if cached is None:
+        try:
+            from hermes_cli.config import load_config
+            from hermes_cli.waifu_config import waifu_enabled
+            cached = waifu_enabled(load_config())
+        except Exception:
+            cached = False
+        agent._waifu_series_enabled_cache = cached
+    return bool(cached)
+
+
+def split_waifu_assistant_rows(
+    batch_rows: List[Dict[str, Any]], batch_msgs: List[Dict],
+) -> "tuple[List[Dict[str, Any]], List[Dict]]":
+    """Expand the turn's final plain-text assistant row into one row per Waifu-Mode bubble.
+
+    The logging half of the series contract: the split lands in the AGENT's own persist so the
+    conversation log is written pre-send exactly like any normal outbound message — one assistant
+    row per bubble, never a duplicate combined row, and never ``agent_persisted=False`` (which
+    reintroduces the #42039 double-write). The gateway sends the same bubbles
+    (``gateway.platforms.helpers.split_waifu_bubbles``), so log and delivery agree.
+
+    Returns ``(rows, msgs)`` unchanged unless the LAST new message is a plain-text assistant whose
+    content the splitter turns into more than one bubble. The repeated message dict keeps
+    ``sync_flushed_message_markers``' 1:1 alignment while the single dedup marker stamps once, so a
+    later flush is a no-op.
+    """
+    if not batch_rows or not batch_msgs or len(batch_rows) != len(batch_msgs):
+        return batch_rows, batch_msgs
+    idx = len(batch_msgs) - 1
+    msg = batch_msgs[idx]
+    if not isinstance(msg, dict) or msg.get("role") != "assistant" or msg.get("tool_calls"):
+        return batch_rows, batch_msgs
+    content = msg.get("content")
+    if not isinstance(content, str) or not content.strip() or batch_rows[idx].get("_compressed_summary"):
+        return batch_rows, batch_msgs
+    try:
+        from gateway.platforms.helpers import split_waifu_bubbles
+        bubbles = split_waifu_bubbles(content)
+    except Exception:
+        return batch_rows, batch_msgs
+    if len(bubbles) <= 1:
+        return batch_rows, batch_msgs
+    base = batch_rows[idx]
+    rows: List[Dict[str, Any]] = []
+    for bubble in bubbles:
+        row = {**base, "content": bubble, "api_content": None}
+        row.pop("_row_id", None)  # one row per bubble: no inherited identity to collide on
+        rows.append(row)
+    return (batch_rows[:idx] + rows + batch_rows[idx + 1:],
+            batch_msgs[:idx] + [msg] * len(bubbles) + batch_msgs[idx + 1:])
+
+
 def _db_flush_adopt_compression_tip(agent) -> bool:
     """Adopt the live continuation of a compression-closed session. Same-id tip = no continuation; a tip
     whose row is missing or already ended is not adopted either."""
@@ -414,6 +470,8 @@ class SessionPersistenceMixin:
             if not self._session_db_created:  # retry row creation if the earlier attempt failed transiently
                 self._ensure_db_session()
             batch_rows, batch_msgs = _db_flush_collect(self, messages, conversation_history)
+            if _waifu_series_enabled(self):
+                batch_rows, batch_msgs = split_waifu_assistant_rows(batch_rows, batch_msgs)
             _db_flush_write(self, batch_rows, batch_msgs, messages)
             # Markers are now the sole truth; reset the one-shot seed so no id() outlives this flush.
             self._flushed_db_message_ids = set()

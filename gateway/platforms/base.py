@@ -4253,6 +4253,94 @@ class BasePlatformAdapter(ABC):
         if ephemeral_ttl and ephemeral_ttl > 0 and result.success and result.message_id:
             delivery_adapter._schedule_ephemeral_delete(event.source.chat_id, result.message_id, ephemeral_ttl)
 
+    async def _dispatch_final_text(
+        self, event: MessageEvent, session_key: str, text_content: str, metadata: Dict[str, Any],
+        is_ephemeral_response: bool, ephemeral_ttl: int, record_delivery: Callable) -> None:
+        """Route the turn's final text: the Waifu-Mode bubble series when ``waifu.enabled``, else
+        the untouched single-send path. The disabled branch is byte-for-byte ``_send_final_text``."""
+        if self._waifu_delivery_enabled(event):
+            await self._send_waifu_series(
+                event, session_key, text_content, metadata,
+                is_ephemeral_response=is_ephemeral_response, ephemeral_ttl=ephemeral_ttl,
+                record_delivery=record_delivery)
+            return
+        await self._send_final_text(
+            event, session_key, text_content, metadata, is_ephemeral_response, ephemeral_ttl, record_delivery)
+
+    def _waifu_delivery_enabled(self, event: MessageEvent) -> bool:
+        """``waifu.enabled`` from the gateway's raw effective config; any read failure is OFF.
+
+        The gateway does not merge ``DEFAULT_CONFIG``, so an absent/malformed section must read
+        OFF — never crash the send path.
+        """
+        try:
+            from gateway.run import _load_gateway_config
+            from hermes_cli.waifu_config import read_waifu_config
+            return read_waifu_config(_load_gateway_config()).enabled
+        except Exception:
+            logger.debug("[%s] waifu config read failed", self.name, exc_info=True)
+            return False
+
+    def _waifu_transport_chunks(self, event: MessageEvent, bubble: str) -> "list[str]":
+        """Split one bubble for the wire when it exceeds the platform cap (fences stay balanced)."""
+        try:
+            limit = int(self.max_message_length_for_chat(event.source.chat_id) or 0)
+            len_fn = self.message_len_fn_for_chat(event.source.chat_id)
+        except Exception:
+            logger.debug("[%s] waifu cap lookup failed", self.name, exc_info=True)
+            return [bubble]
+        if limit and len_fn(bubble) > limit:
+            from gateway.platforms.helpers import split_text_fence_aware
+            chunks = [c for c in split_text_fence_aware(bubble, limit, len_fn, balance_fences=True) if c and c.strip()]
+            if chunks:
+                return chunks
+        return [bubble]
+
+    async def _send_waifu_series(
+        self, event: MessageEvent, session_key: str, text_content: str, metadata: Dict[str, Any], *,
+        is_ephemeral_response: bool, ephemeral_ttl: int, record_delivery: Callable,
+    ) -> None:
+        """Deliver one assistant turn as a SEQUENCE of bubbles, in order.
+
+        The bubbles are the agent-side split (``split_waifu_bubbles``): the conversation log
+        already carries one assistant row per bubble, written pre-send like any normal outbound
+        message, so this path adds no rows. A mid-series failure STOPS the series at that bubble
+        and is logged — never raised into ``_notify_turn_error`` — matching the log to what the
+        user actually received. A single bubble (or a split failure) falls back to the normal
+        single send so behavior is identical without a real series.
+        """
+        from gateway.platforms.helpers import split_waifu_bubbles
+        try:
+            bubbles = split_waifu_bubbles(text_content)
+        except Exception as exc:
+            logger.warning("[%s] waifu bubble split failed, sending as one: %s", self.name, exc, exc_info=True)
+            bubbles = []
+        if len(bubbles) <= 1:
+            await self._send_final_text(
+                event, session_key, text_content, metadata, is_ephemeral_response, ephemeral_ttl, record_delivery)
+            return
+        reply_to = _reply_anchor_for_event(event)
+        for index, bubble in enumerate(bubbles, start=1):
+            for chunk in self._waifu_transport_chunks(event, bubble):
+                try:
+                    result, delivery_adapter = await self.send_final_ledgered(
+                        event, session_key, chunk, metadata,
+                        reply_to=reply_to, is_ephemeral_response=is_ephemeral_response)
+                except Exception as exc:
+                    # A raised send must not escape into _notify_turn_error; record and stop.
+                    logger.error("[%s] waifu bubble %d/%d raised: %s", self.name, index, len(bubbles), exc,
+                                 exc_info=True)
+                    record_delivery(SendResult(success=False, error=str(exc)))
+                    return
+                record_delivery(result)
+                if ephemeral_ttl and ephemeral_ttl > 0 and result.success and result.message_id:
+                    delivery_adapter._schedule_ephemeral_delete(
+                        event.source.chat_id, result.message_id, ephemeral_ttl)
+                if not result.success:
+                    logger.warning("[%s] waifu series stopped at bubble %d/%d: %s",
+                                   self.name, index, len(bubbles), getattr(result, "error", None))
+                    return
+
     async def _notify_turn_error(self, event: MessageEvent, e: BaseException) -> Optional[dict]:
         """Tell the user a turn failed rather than leaving radio silence (last resort:
         a failing notice is logged, never raised). Returns the thread metadata used."""
@@ -4463,7 +4551,7 @@ class BasePlatformAdapter(ABC):
                         or _tts_paths or _tts_caption_delivered:
                     self.pause_typing_for_chat(event.source.chat_id)
                 if text_content and not _tts_caption_delivered:
-                    await self._send_final_text(
+                    await self._dispatch_final_text(
                         event, session_key, text_content, _final_thread_metadata,
                         is_ephemeral_response, _ephemeral_ttl, _record_delivery)
                 await self._deliver_attachments(

@@ -423,6 +423,74 @@ def split_markdown_atoms(text: str) -> "list[str]":
     return atoms
 
 
+#: Standalone line the model may emit to end a bubble — the same token the streaming frame
+#: composer joins with (``gateway/stream_consumer.py``), so the contract is one delimiter.
+WAIFU_BUBBLE_DELIMITER = "---"
+
+
+def _split_waifu_on_delimiter(text: str) -> "list[str] | None":
+    """Pieces split on standalone ``---`` lines (consumed); ``None`` when no delimiter is present.
+
+    A ``---`` inside a fenced code block is code, never a delimiter.
+    """
+    pieces: "list[str]" = []
+    current: "list[str]" = []
+    in_fence = False
+    found = False
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if in_fence:
+            current.append(line)
+            if stripped.startswith("```"):
+                in_fence = False
+            continue
+        if stripped.startswith("```"):
+            in_fence = True
+            current.append(line)
+            continue
+        if stripped == WAIFU_BUBBLE_DELIMITER:
+            found = True
+            pieces.append("\n".join(current).strip())
+            current = []
+            continue
+        current.append(line)
+    if not found:
+        return None
+    pieces.append("\n".join(current).strip())
+    return pieces
+
+
+def split_waifu_bubbles(text, max_length=None, len_fn=None) -> "list[str]":
+    """Split one assistant reply into Waifu-Mode chat bubbles.
+
+    An explicit delimiter — a standalone ``---`` line — switches to deterministic splitting: only
+    those lines cut the reply, so the model fully controls its bubble count. Without one, the reply
+    splits on paragraph atoms via :func:`split_markdown_atoms`, so fenced code and tables stay
+    whole. Empty pieces are dropped.
+
+    *max_length* (platform cap in ``len_fn`` units) re-chunks any remaining oversize bubble with
+    :func:`split_text_fence_aware`, closing/reopening fences so each send renders standalone.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return []
+    _len = len_fn or len
+    pieces = _split_waifu_on_delimiter(text)
+    if pieces is None:
+        pieces = split_markdown_atoms(text)
+    bubbles = [piece for piece in pieces if piece and piece.strip()]
+    if max_length:
+        re_chunked: "list[str]" = []
+        for bubble in bubbles:
+            if _len(bubble) > max_length:
+                re_chunked.extend(
+                    chunk for chunk in split_text_fence_aware(
+                        bubble, max_length, len_fn, balance_fences=True) if chunk and chunk.strip())
+            else:
+                re_chunked.append(bubble)
+        bubbles = re_chunked
+    return bubbles
+
+
 def infer_block_separator(prev_chunk: str, next_chunk: str) -> str:
     """``'\\n'`` when the boundary sits at a code fence or a continued table, else ``'\\n\\n'``."""
     prev_trimmed = prev_chunk.rstrip()
