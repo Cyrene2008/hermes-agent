@@ -1137,6 +1137,24 @@ DEFAULT_CONFIG = {
         "native_audio": "auto",
     },
 
+    # Native Waifu-Mode — one assistant turn may deliver a SEQUENCE of chat bubbles (split on
+    # blank lines) instead of a single send, each bubble logged like a normal outbound message.
+    # Default OFF: with enabled=false the legacy single-send reply path runs untouched.
+    "waifu": {
+        "enabled": False,  # master switch; false = unchanged single-reply behavior
+        # Typewriter pacing: chars/sec; each bubble waits len(text)/typing_speed seconds before
+        # sending. 0 (or empty) = no delay, send immediately. Suggested 0.5-20, default off.
+        "typing_speed": 0.0,
+        # Steer/interrupt policy: how many already-planned bubbles still go out after a new user
+        # message arrives before the sequence stops. 0 = stop immediately, 1/2/3 = finish N more.
+        "interrupt_after": 0,
+        # Strip trailing sentence punctuation (。！？,.!?~ …) from the OUTBOUND bubble only so it
+        # reads casually; the conversation log keeps the original text. ♪/emoji endings survive.
+        "strip_trailing_punctuation": False,
+        # Emoji/sticker name -> image path; an emoji token in a bubble sends as an image message.
+        "emojis": {},
+    },
+
     "stt": {
         "enabled": True,
         # Echo the raw transcript of gateway voice messages back as a 🎙️ message.

@@ -1108,6 +1108,56 @@ def _validate_voice(config: Dict[str, Any], issues: List[ConfigIssue]) -> None:
                "Set voice.submit_mode to direct (submit immediately) or draft (edit before sending)")
 
 
+def _validate_waifu(config: Dict[str, Any], issues: List[ConfigIssue]) -> None:
+    """The ``waifu`` section must hold usable types — bad values otherwise crash or silently
+    distort the outbound bubble path (a negative speed never sends, a str speed raises on
+    division). Absent keys fall back to DEFAULT_CONFIG and are never flagged."""
+    waifu = config.get("waifu")
+    if waifu is None:
+        return
+    hint = ("Fix the waifu: section in config.yaml, e.g.\n"
+            "  waifu:\n    enabled: true\n    typing_speed: 3.0\n    interrupt_after: 0")
+    if not isinstance(waifu, dict):
+        _issue(issues, "error", f"waifu must be a mapping, got {type(waifu).__name__}", hint)
+        return
+
+    def _flag(key: str, message: str) -> None:
+        _issue(issues, "error", f"waifu.{key} {message}", hint)
+
+    if "enabled" in waifu and not isinstance(waifu.get("enabled"), bool):
+        _flag("enabled", f"must be true or false, got {waifu.get('enabled')!r}")
+    if "strip_trailing_punctuation" in waifu and not isinstance(
+            waifu.get("strip_trailing_punctuation"), bool):
+        _flag("strip_trailing_punctuation",
+              f"must be true or false, got {waifu.get('strip_trailing_punctuation')!r}")
+
+    speed = waifu.get("typing_speed")
+    if speed is not None:
+        # bool is an int subclass — `typing_speed: true` is a type error, not 1 char/sec.
+        if isinstance(speed, bool) or not isinstance(speed, (int, float)):
+            _flag("typing_speed", f"must be a number of chars/sec, got {speed!r}")
+        elif speed < 0:
+            _flag("typing_speed", f"must be >= 0 (0 = no delay), got {speed!r}")
+
+    after = waifu.get("interrupt_after")
+    if after is not None:
+        if isinstance(after, bool) or not isinstance(after, (int, float)):
+            _flag("interrupt_after", f"must be an integer count of bubbles, got {after!r}")
+        elif float(after) != int(after):
+            _flag("interrupt_after", f"must be an integer count of bubbles, got {after!r}")
+        elif after < 0:
+            _flag("interrupt_after", f"must be >= 0 (0 = stop immediately), got {after!r}")
+
+    emojis = waifu.get("emojis")
+    if emojis is not None and not isinstance(emojis, dict):
+        _flag("emojis", f"must be a mapping of emoji name -> image path, got {emojis!r}")
+    elif isinstance(emojis, dict):
+        for name, path in emojis.items():
+            if not isinstance(name, str) or not isinstance(path, str):
+                _flag("emojis", f"entries must be name -> path strings, got {name!r}: {path!r}")
+                break
+
+
 def _validate_timezone(config: Dict[str, Any], issues: List[ConfigIssue]) -> None:
     """``timezone`` must be an IANA name the runtime can load.
 
@@ -1273,6 +1323,7 @@ def validate_config_structure(config: Optional[Dict[str, Any]] = None) -> List["
     issues: List[ConfigIssue] = []
     _validate_voice(config, issues)
     _validate_timezone(config, issues)
+    _validate_waifu(config, issues)
     cp = config.get("custom_providers")
     fb = config.get("fallback_model")
     for value, validator in ((cp, _validate_custom_providers), (fb, _validate_fallback_model)):
