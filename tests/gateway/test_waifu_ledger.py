@@ -66,6 +66,7 @@ def test_bad_destination_returns_false_without_raising(tmp_path):
 class _StubAdapter:
     name = "stub"
     _dispatch_final_text = BasePlatformAdapter._dispatch_final_text
+    _waifu_is_assistant_reply = staticmethod(BasePlatformAdapter._waifu_is_assistant_reply)
     _send_waifu_series = BasePlatformAdapter._send_waifu_series
     _send_waifu_sticker = BasePlatformAdapter._send_waifu_sticker
     _waifu_ledger_record = BasePlatformAdapter._waifu_ledger_record

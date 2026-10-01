@@ -29,6 +29,7 @@ class _StubAdapter:
 
     name = "stub"
     _dispatch_final_text = BasePlatformAdapter._dispatch_final_text
+    _waifu_is_assistant_reply = staticmethod(BasePlatformAdapter._waifu_is_assistant_reply)
     _send_waifu_series = BasePlatformAdapter._send_waifu_series
     _send_waifu_sticker = BasePlatformAdapter._send_waifu_sticker
     _waifu_transport_chunks = BasePlatformAdapter._waifu_transport_chunks

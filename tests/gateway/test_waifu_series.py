@@ -30,6 +30,7 @@ class _StubAdapter:
 
     name = "stub"
     _dispatch_final_text = BasePlatformAdapter._dispatch_final_text
+    _waifu_is_assistant_reply = staticmethod(BasePlatformAdapter._waifu_is_assistant_reply)
     _send_waifu_series = BasePlatformAdapter._send_waifu_series
     _waifu_transport_chunks = BasePlatformAdapter._waifu_transport_chunks
     _waifu_interrupt_guard = BasePlatformAdapter._waifu_interrupt_guard
@@ -129,6 +130,64 @@ def test_enabled_single_bubble_falls_back_to_single_send():
     _run(stub._dispatch_final_text(_event(), "sk", "just one line", {}, False, 0, lambda _r: None))
     assert sends == []
     assert finals == ["just one line"]
+
+
+def test_slash_status_notice_bypasses_the_series_entirely():
+    """A /yolo (or any slash/status) notice must NOT be Waifu-split — one whole send.
+
+    The final-text seam carries the assistant lane AND the notice lane. The event still carries
+    its leading-slash text when a command HANDLED the turn, which is the exclusion signal, so the
+    ⚡ YOLO notice that production shredded into 10 micro-bubbles goes out byte-for-byte.
+    """
+    from agent.i18n import t
+    sends: list = []
+    finals: list = []
+    stub = _make_stub(enabled=True, sends=sends, finals=finals)
+    notice = t("gateway.yolo.enabled", lang="en")
+    event = MessageEvent(
+        text="/yolo",
+        source=SessionSource(platform=Platform.TELEGRAM, chat_id="c1", user_id="u"),
+    )
+    _run(stub._dispatch_final_text(event, "sk", notice, {}, True, 0, lambda _r: None))
+    assert sends == []                 # never entered the bubble series
+    assert finals == [notice]          # exactly one plain send, byte-for-byte
+
+
+def test_ephemeral_notice_on_a_non_command_event_is_not_split():
+    """An ``EphemeralReply`` is a system notice by construction — never split, slash or not."""
+    sends: list = []
+    finals: list = []
+    stub = _make_stub(enabled=True, sends=sends, finals=finals)
+    notice = "⚡ Force-stopped. The agent was still starting — session unlocked."
+    event = _event()                       # text "hi": NOT a slash command
+    _run(stub._dispatch_final_text(event, "sk", notice, {}, True, 0, lambda _r: None))
+    assert sends == []
+    assert finals == [notice]
+
+
+def test_rewriting_command_prompt_is_split_as_an_assistant_reply():
+    """A command that REWRITES the turn (skill invocation, /retry …) leaves an agent reply.
+
+    It replaced ``event.text`` with the prompt, so there is no command name left and the reply is
+    the assistant's — it still gets the bubble series.
+    """
+    sends: list = []
+    finals: list = []
+    stub = _make_stub(enabled=True, sends=sends, finals=finals)
+    event = MessageEvent(
+        text="please summarise the document",   # rewritten by the command; no leading slash
+        source=SessionSource(platform=Platform.TELEGRAM, chat_id="c1", user_id="u"),
+    )
+    _run(stub._dispatch_final_text(event, "sk", "one\n\ntwo\n\nthree", {}, False, 0, lambda _r: None))
+    assert sends == ["one", "two", "three"]
+    assert finals == []
+
+
+def test_assistant_reply_probe_reads_the_command_name():
+    from gateway.platforms.event import MessageEvent as _ME
+    src = SessionSource(platform=Platform.TELEGRAM, chat_id="c1", user_id="u")
+    assert BasePlatformAdapter._waifu_is_assistant_reply(_ME(text="/status", source=src)) is False
+    assert BasePlatformAdapter._waifu_is_assistant_reply(_ME(text="just chatting", source=src)) is True
 
 
 def test_series_rechunks_oversize_bubble_for_the_wire():

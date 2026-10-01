@@ -4257,8 +4257,17 @@ class BasePlatformAdapter(ABC):
         self, event: MessageEvent, session_key: str, text_content: str, metadata: Dict[str, Any],
         is_ephemeral_response: bool, ephemeral_ttl: int, record_delivery: Callable) -> None:
         """Route the turn's final text: the Waifu-Mode bubble series when ``waifu.enabled``, else
-        the untouched single-send path. The disabled branch is byte-for-byte ``_send_final_text``."""
-        if self._waifu_delivery_enabled(event):
+        the untouched single-send path. The disabled branch is byte-for-byte ``_send_final_text``.
+
+        ONLY the assistant's own conversational reply is Waifu-split (气泡节奏). This seam carries
+        BOTH lanes — the agent's final answer AND a slash command's SYSTEM/SLASH/STATUS notice — so
+        the notice lane is excluded structurally: an ``EphemeralReply`` is a system notice by
+        construction (auto-delete), and a HANDLED command leaves its slash text on the event. A
+        status line is therefore always ONE message, never a trail of micro-bubbles.
+        """
+        if (self._waifu_delivery_enabled(event)
+                and not is_ephemeral_response
+                and self._waifu_is_assistant_reply(event)):
             await self._send_waifu_series(
                 event, session_key, text_content, metadata,
                 is_ephemeral_response=is_ephemeral_response, ephemeral_ttl=ephemeral_ttl,
@@ -4266,6 +4275,25 @@ class BasePlatformAdapter(ABC):
             return
         await self._send_final_text(
             event, session_key, text_content, metadata, is_ephemeral_response, ephemeral_ttl, record_delivery)
+
+    @staticmethod
+    def _waifu_is_assistant_reply(event: MessageEvent) -> bool:
+        """True only for the assistant's own final reply — False for a slash/status notice.
+
+        The outbound final-text seam serves the agent's conversational answer and a slash
+        command's SYSTEM/SLASH/STATUS notice through the same ``_dispatch_final_text``. A HANDLED
+        command still leaves its leading-slash text on the event, so ``get_command()`` truthy marks
+        the notice lane and the reply takes the single-send path — Waifu Mode never shreds a
+        system notice. Commands that REWRITE the turn into an agent prompt (skill invocation,
+        ``/retry`` …) replace ``event.text`` before the agent runs, leaving no command name, so
+        those replies are the assistant's and are split as usual. An unreadable event fails safe
+        to the single send (never split a notice).
+        """
+        try:
+            return event.get_command() is None
+        except Exception:
+            logger.debug("waifu assistant-reply probe failed; sending whole", exc_info=True)
+            return False
 
     def _waifu_config(self, event: MessageEvent):
         """The typed ``waifu`` section from the gateway's raw effective config; ``None`` if unreadable.

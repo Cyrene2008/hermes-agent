@@ -26,6 +26,7 @@ from hermes_cli.waifu_config import WaifuConfig
 class _StubAdapter:
     name = "stub"
     _dispatch_final_text = BasePlatformAdapter._dispatch_final_text
+    _waifu_is_assistant_reply = staticmethod(BasePlatformAdapter._waifu_is_assistant_reply)
     _send_waifu_series = BasePlatformAdapter._send_waifu_series
     _waifu_transport_chunks = BasePlatformAdapter._waifu_transport_chunks
     _waifu_interrupt_guard = BasePlatformAdapter._waifu_interrupt_guard
