@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Heart, ImageOff, Minus, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Heart, ImageOff, Minus, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@nous-research/ui/ui/components/badge";
 import { Button } from "@nous-research/ui/ui/components/button";
 import {
@@ -14,13 +14,14 @@ import { Spinner } from "@nous-research/ui/ui/components/spinner";
 import { Switch } from "@nous-research/ui/ui/components/switch";
 import { Toast } from "@nous-research/ui/ui/components/toast";
 import { useToast } from "@nous-research/ui/hooks/use-toast";
-import { api, HERMES_BASE_PATH } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { Translations } from "@/i18n/types";
 import { useI18n } from "@/i18n";
 import { en } from "@/i18n/en";
 import { usePageHeader } from "@/contexts/usePageHeader";
 import { getNestedValue, setNestedValue } from "@/lib/nested";
 import { errorMessage } from "@/lib/api-error";
+import { WaifuEasterEgg } from "@/components/WaifuEasterEgg";
 import {
   TYPING_SPEED_MAX,
   TYPING_SPEED_MIN,
@@ -151,37 +152,6 @@ function EmojiThumb({ path, fallback }: { path: string; fallback: string }) {
       onError={() => setResolved({ path, src: null, failed: true })}
       className="h-10 w-10 shrink-0 border border-border object-cover"
     />
-  );
-}
-
-/** The Q版 Cyrene sticker in a page corner — revealed only on hover/click. */
-function EasterEgg({ label }: { label: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="pointer-events-none sticky bottom-3 z-20 flex flex-col items-end gap-2">
-      <Button
-        ghost
-        size="icon"
-        aria-label={label}
-        title={label}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onClick={() => setOpen((value) => !value)}
-        className="pointer-events-auto h-6 w-6 text-text-tertiary opacity-40 transition-opacity hover:opacity-100 focus-visible:opacity-100"
-      >
-        <Sparkles className="h-3.5 w-3.5" />
-      </Button>
-      {open && (
-        <img
-          src={`${HERMES_BASE_PATH}/cyrene_easter_egg.png`}
-          alt=""
-          aria-hidden
-          className="pointer-events-auto h-32 w-32 drop-shadow-lg"
-        />
-      )}
-    </div>
   );
 }
 
@@ -550,7 +520,7 @@ export default function WaifuPage() {
         </Card>
       )}
 
-      <EasterEgg label={w.easterEgg} />
+      <WaifuEasterEgg label={w.easterEgg} />
     </div>
   );
 }
