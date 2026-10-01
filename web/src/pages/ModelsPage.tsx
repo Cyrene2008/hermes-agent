@@ -178,6 +178,8 @@ function CapabilityBadges({
 }: {
   capabilities: ModelsAnalyticsModelEntry["capabilities"];
 }) {
+  const { t } = useI18n();
+  const L = modelsPageCopy(t);
   const hasAny =
     capabilities.supports_tools ||
     capabilities.supports_vision ||
@@ -189,17 +191,17 @@ function CapabilityBadges({
     <div className="flex flex-wrap items-center gap-1.5">
       {capabilities.supports_tools && (
         <span className="inline-flex items-center gap-1 bg-success/10 px-1.5 py-0.5 text-xs font-medium text-success">
-          <Wrench className="h-2.5 w-2.5" /> Tools
+          <Wrench className="h-2.5 w-2.5" /> {L.tools}
         </span>
       )}
       {capabilities.supports_vision && (
         <span className="inline-flex items-center gap-1 bg-blue-500/10 px-1.5 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
-          <Eye className="h-2.5 w-2.5" /> Vision
+          <Eye className="h-2.5 w-2.5" /> {L.vision}
         </span>
       )}
       {capabilities.supports_reasoning && (
         <span className="inline-flex items-center gap-1 bg-purple-500/10 px-1.5 py-0.5 text-xs font-medium text-purple-600 dark:text-purple-400">
-          <Brain className="h-2.5 w-2.5" /> Reasoning
+          <Brain className="h-2.5 w-2.5" /> {L.reasoning}
         </span>
       )}
       {capabilities.model_family && (
@@ -963,6 +965,8 @@ function ModelSettingsPanel({
   const [pendingReloadModel, setPendingReloadModel] = useState<string | null>(
     null,
   );
+  const { t } = useI18n();
+  const L = modelsPageCopy(t);
 
   const mainProv = aux?.main.provider ?? "";
   const mainModel = aux?.main.model ?? "";
@@ -1005,9 +1009,9 @@ function ModelSettingsPanel({
       <CardHeader className="min-w-0 pb-3">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <Settings2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <CardTitle className="text-sm">Model Settings</CardTitle>
+          <CardTitle className="text-sm">{L.modelSettings}</CardTitle>
           <span className="max-w-full min-w-0 text-xs text-text-secondary [overflow-wrap:anywhere]">
-            applies to new sessions
+            {L.appliesNewSessions}
           </span>
         </div>
       </CardHeader>
@@ -1019,13 +1023,13 @@ function ModelSettingsPanel({
             <div className="flex items-center gap-2 mb-0.5">
               <Star className="h-3 w-3 text-primary" />
               <span className="text-display text-xs font-medium tracking-wider">
-                Main model
+                {L.mainModel}
               </span>
             </div>
             <div className="text-xs font-mono text-text-secondary truncate">
-              {mainProv || "(unset)"}
+              {mainProv || L.unset}
               {mainProv && mainModel && " · "}
-              {mainModel || "(unset)"}
+              {mainModel || L.unset}
             </div>
           </div>
           <Button
@@ -1033,7 +1037,7 @@ function ModelSettingsPanel({
             onClick={() => setPicker({ kind: "main" })}
             className="shrink-0 self-start text-xs uppercase sm:self-center"
           >
-            Change
+            {L.change}
           </Button>
         </div>
 
@@ -1043,13 +1047,19 @@ function ModelSettingsPanel({
             <div className="flex items-center gap-2 mb-0.5">
               <Cpu className="h-3 w-3 text-text-tertiary" />
               <span className="text-display text-xs font-medium tracking-wider">
-                Auxiliary tasks
+                {L.auxiliaryTasks}
               </span>
             </div>
             <div className="text-xs font-mono text-text-secondary truncate">
               {auxOverrideCount > 0
-                ? `${auxOverrideCount} override${auxOverrideCount > 1 ? "s" : ""} · ${AUX_TASKS.length - auxOverrideCount} auto`
-                : `${AUX_TASKS.length} tasks · all auto`}
+                ? L.overridesSummary
+                    .replace("{count}", String(auxOverrideCount))
+                    .replace("{s}", auxOverrideCount > 1 ? "s" : "")
+                    .replace("{auto}", String(AUX_TASKS.length - auxOverrideCount))
+                : L.allAutoSummary.replace(
+                    "{count}",
+                    String(AUX_TASKS.length),
+                  )}
             </div>
           </div>
           <Button
@@ -1058,7 +1068,7 @@ function ModelSettingsPanel({
             onClick={() => setAuxModalOpen(true)}
             className="shrink-0 self-start text-xs uppercase sm:self-center"
           >
-            Configure
+            {L.configure}
           </Button>
         </div>
 
@@ -1067,13 +1077,19 @@ function ModelSettingsPanel({
             <div className="flex items-center gap-2 mb-0.5">
               <Brain className="h-3 w-3 text-text-tertiary" />
               <span className="text-display text-xs font-medium tracking-wider">
-                Mixture of Agents
+                {L.mixtureOfAgents}
               </span>
             </div>
             <div className="text-xs font-mono text-text-secondary truncate">
               {moa
-                ? `${moa.reference_models.length} reference${moa.reference_models.length === 1 ? "" : "s"} · ${moa.aggregator.provider}/${shortModelName(moa.aggregator.model)}`
-                : "not loaded"}
+                ? L.moaSummary
+                    .replace("{refs}", String(moa.reference_models.length))
+                    .replace("{s}", moa.reference_models.length === 1 ? "" : "s")
+                    .replace(
+                      "{agg}",
+                      `${moa.aggregator.provider}/${shortModelName(moa.aggregator.model)}`,
+                    )
+                : L.notLoaded}
             </div>
           </div>
           <Button
@@ -1083,7 +1099,7 @@ function ModelSettingsPanel({
             disabled={!moa}
             className="shrink-0 self-start text-xs uppercase sm:self-center"
           >
-            Configure
+            {L.configure}
           </Button>
         </div>
 
@@ -1092,7 +1108,7 @@ function ModelSettingsPanel({
             key={`picker-${refreshKey}`}
             loader={api.getModelOptions}
             alwaysGlobal
-            title="Set Main Model"
+            title={L.setMainModel}
             onApply={async ({ provider, model, confirmExpensiveModel }) => {
               const result = await applyAssignment({
                 confirmExpensiveModel,
@@ -1162,6 +1178,7 @@ export default function ModelsPage() {
   const [schema, setSchema] = useState<Record<string, unknown> | null>(null);
   const [routingSaving, setRoutingSaving] = useState(false);
   const { t } = useI18n();
+  const L = modelsPageCopy(t);
   const { toast, showToast } = useToast();
   const { setAfterTitle, setEnd } = usePageHeader();
 
@@ -1348,13 +1365,13 @@ export default function ModelsPage() {
               </div>
               {!showTokens && (
                 <p className="mt-4 text-xs text-text-tertiary leading-relaxed">
-                  Token & cost analytics are hidden because the local counts
-                  exclude auxiliary calls (compression, vision, web extract,
-                  …) and provider retries, so they diverge from your provider
-                  bill. Enable{" "}
+                  {L.tokenHiddenBody} {L.tokenHiddenEnable}{" "}
                   <span className="font-mono">dashboard.show_token_analytics</span>{" "}
-                  in <a href="/config" className="underline">Config</a> to
-                  show the local debug estimate anyway.
+                  {L.tokenHiddenIn}{" "}
+                  <a href="/config" className="underline">
+                    {L.tokenHiddenConfig}
+                  </a>{" "}
+                  {L.tokenHiddenTail}
                 </p>
               )}
             </CardContent>
