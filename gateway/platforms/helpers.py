@@ -461,13 +461,161 @@ def _split_waifu_on_delimiter(text: str) -> "list[str] | None":
     return pieces
 
 
+# ── Breath rhythm: sentence-per-bubble splitting (气泡节奏／分句) ───────────────────────────────
+# Live native bubbles run 40–116 chars; the hand-written skill breathed 10–30. Without a ``---``
+# the atom split below only cuts on blank lines, so one long paragraph ships as one wall. These
+# thresholds cut a long TEXT atom at its sentence enders so each bubble is one breath again.
+
+#: A TEXT atom longer than this is breath-split at sentence enders (a short paragraph is untouched).
+WAIFU_BUBBLE_SENTENCE_MAX = 45
+
+#: A SINGLE sentence longer than this has no ender left to cut at, so the splitter falls back to
+#: commas, then whitespace. A lone sentence between ``SENTENCE_MAX`` and here stays whole.
+WAIFU_BUBBLE_SENTENCE_HARD_MAX = 60
+
+#: Don't ship a micro-bubble: a sentence shorter than this folds into the previous one when the pair
+#: still fits ``SENTENCE_MAX`` (``嗯。`` on its own is not worth a send).
+WAIFU_BUBBLE_MIN = 5
+
+#: Sentence enders a breath may cut AFTER (a run stays on the left piece). ASCII ``.`` is deliberately
+#: absent — ambiguous (decimals, abbreviations) — while ``…`` is a real CJK ellipsis breath.
+WAIFU_BUBBLE_SENTENCE_ENDERS = "。！？!?；;…"
+
+#: Fallback cut points for a lone sentence over ``SENTENCE_HARD_MAX``: commas / ideographic pauses
+#: first, then whitespace. Anything with neither stays whole and the platform cap is the last net.
+WAIFU_BUBBLE_COMMA_BREAKERS = "，,、"
+WAIFU_BUBBLE_WHITESPACE = " \t\n\r\x0b\x0c\u3000"
+
+#: Quote pairs whose interior must not be cut: an ender inside a still-open quote is not a breath
+#: (``「他说。好。」`` keeps its 。 whole). ASCII ``'`` is absent on purpose — apostrophes (``it's``)
+#: would masquerade as an open quote and mute every later cut. ASCII ``"`` is symmetric and toggles.
+WAIFU_BUBBLE_QUOTE_PAIRS = {"「": "」", "『": "』", "“": "”", "‘": "’", '"': '"'}
+
+
+def _waifu_sentence_cut_positions(text):
+    """Indices to cut AFTER for sentence breaths — skipping inline-code spans and open quotes.
+
+    A ``。！？!?；;…`` run inside a ``\\``` inline span or a still-open quote is not a breath, so
+    :data:`WAIFU_BUBBLE_SENTENCE_ENDERS` never tears a code span or a quotation apart.
+    """
+    positions = []
+    n = len(text)
+    i = 0
+    inline_open = 0            # backtick run length that opened the current span; 0 = not in code
+    quote_stack = []
+    while i < n:
+        ch = text[i]
+        if ch == '`':
+            run = 1
+            while i + run < n and text[i + run] == '`':
+                run += 1
+            if inline_open == 0:
+                inline_open = run
+            elif run == inline_open:
+                inline_open = 0
+            i += run
+            continue
+        if inline_open:
+            i += 1
+            continue
+        closer = WAIFU_BUBBLE_QUOTE_PAIRS.get(ch)
+        if closer is not None:
+            if closer == ch:                       # symmetric quote: toggle open/close
+                if quote_stack and quote_stack[-1] == ch:
+                    quote_stack.pop()
+                else:
+                    quote_stack.append(ch)
+            else:
+                quote_stack.append(closer)
+            i += 1
+            continue
+        if quote_stack and ch == quote_stack[-1]:
+            quote_stack.pop()
+            i += 1
+            continue
+        if not quote_stack and ch in WAIFU_BUBBLE_SENTENCE_ENDERS:
+            run_end = i + 1
+            while run_end < n and text[run_end] in WAIFU_BUBBLE_SENTENCE_ENDERS:
+                run_end += 1
+            positions.append(run_end)
+            i = run_end
+            continue
+        i += 1
+    return positions
+
+
+def _waifu_breath_units(text, breakers):
+    """Cut *text* after every char in *breakers* (kept on the left piece); no empty units."""
+    units = []
+    start = 0
+    for i, ch in enumerate(text):
+        if ch in breakers:
+            units.append(text[start:i + 1])
+            start = i + 1
+    if start < len(text):
+        units.append(text[start:])
+    return [unit for unit in units if unit]
+
+
+def _waifu_merge_short_units(units):
+    """Fold a sub-``MIN`` unit into the previous one while the pair still fits ``SENTENCE_MAX``."""
+    merged: "list[str]" = []
+    for unit in units:
+        if (merged and len(merged[-1]) < WAIFU_BUBBLE_MIN
+                and len(merged[-1]) + len(unit) <= WAIFU_BUBBLE_SENTENCE_MAX):
+            merged[-1] += unit
+        else:
+            merged.append(unit)
+    return merged
+
+
+def _waifu_split_oversize(piece):
+    """Last-resort breath split for a lone sentence over ``HARD_MAX``: commas, then whitespace."""
+    if len(piece) <= WAIFU_BUBBLE_SENTENCE_HARD_MAX:
+        return [piece]
+    pieces = _waifu_merge_short_units(_waifu_breath_units(piece, WAIFU_BUBBLE_COMMA_BREAKERS))
+    out: "list[str]" = []
+    for part in pieces:
+        if len(part) > WAIFU_BUBBLE_SENTENCE_HARD_MAX:
+            out.extend(_waifu_merge_short_units(
+                _waifu_breath_units(part, WAIFU_BUBBLE_WHITESPACE)))
+        else:
+            out.append(part)
+    return out
+
+
+def _split_waifu_atom_into_breaths(atom):
+    """Sentence-breath split for ONE non-delimiter markdown atom (气泡节奏／分句).
+
+    Returns ``[atom]`` byte-for-byte when the atom is short, is fenced code / a table, or simply has
+    no breath to cut at. Otherwise one piece per sentence (enders kept), with a lone sentence over
+    ``HARD_MAX`` falling back to commas/whitespace. Pieces are whitespace-trimmed and empties dropped.
+    """
+    if len(atom) <= WAIFU_BUBBLE_SENTENCE_MAX or is_fence_atom(atom) or is_table_atom(atom):
+        return [atom]
+    cuts = _waifu_sentence_cut_positions(atom)
+    units = []
+    start = 0
+    for pos in cuts:
+        units.append(atom[start:pos])
+        start = pos
+    units.append(atom[start:])
+    breaths: "list[str]" = []
+    for unit in _waifu_merge_short_units([u for u in units if u]):
+        breaths.extend(_waifu_split_oversize(unit))
+    breaths = [breath.strip() for breath in breaths if breath.strip()]
+    return breaths if len(breaths) > 1 else [atom]
+
+
 def split_waifu_bubbles(text, max_length=None, len_fn=None) -> "list[str]":
     """Split one assistant reply into Waifu-Mode chat bubbles.
 
     An explicit delimiter — a standalone ``---`` line — switches to deterministic splitting: only
-    those lines cut the reply, so the model fully controls its bubble count. Without one, the reply
-    splits on paragraph atoms via :func:`split_markdown_atoms`, so fenced code and tables stay
-    whole. Empty pieces are dropped.
+    those lines cut the reply, so the model fully controls its bubble count (breath splitting is
+    skipped there entirely). Without one, the reply splits on paragraph atoms via
+    :func:`split_markdown_atoms`, so fenced code and tables stay whole, and each still-long TEXT atom
+    is breath-split at sentence enders by :func:`_split_waifu_atom_into_breaths` (气泡节奏). Empty
+    pieces are dropped.
 
     *max_length* (platform cap in ``len_fn`` units) re-chunks any remaining oversize bubble with
     :func:`split_text_fence_aware`, closing/reopening fences so each send renders standalone.
@@ -477,8 +625,11 @@ def split_waifu_bubbles(text, max_length=None, len_fn=None) -> "list[str]":
     _len = len_fn or len
     pieces = _split_waifu_on_delimiter(text)
     if pieces is None:
-        pieces = split_markdown_atoms(text)
-    bubbles = [piece for piece in pieces if piece and piece.strip()]
+        bubbles = [breath for atom in split_markdown_atoms(text)
+                   for breath in _split_waifu_atom_into_breaths(atom)
+                   if breath and breath.strip()]
+    else:
+        bubbles = [piece for piece in pieces if piece and piece.strip()]
     if max_length:
         re_chunked: "list[str]" = []
         for bubble in bubbles:
