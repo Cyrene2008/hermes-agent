@@ -6,11 +6,12 @@ import asyncio
 import contextlib
 import json
 import logging
+import random
 import re
 import threading
 import time
 from pathlib import Path
-from typing import Any, MutableMapping, Optional
+from typing import Any, Callable, MutableMapping, Optional
 from gateway.platforms.event import MessageEvent
 from utils import atomic_json_write
 
@@ -491,14 +492,19 @@ def split_waifu_bubbles(text, max_length=None, len_fn=None) -> "list[str]":
     return bubbles
 
 
-def waifu_pace_delay(text, typing_speed) -> float:
+def waifu_pace_delay(text, typing_speed, jitter_ms=0, *, uniform: Callable[[float, float], float] = random.uniform) -> float:
     """Seconds to wait before sending one Waifu-Mode bubble at ``typing_speed`` chars/sec.
 
-    ``typing_speed <= 0`` is the instant path: no delay at all.
+    ``typing_speed <= 0`` is the instant path: no delay, not even jitter. Otherwise the wait is
+    ``len(text) / typing_speed`` plus a uniform +/- ``jitter_ms`` of human typing wobble, clamped
+    at 0 so one unlucky draw can never turn a wait negative.
     """
     if typing_speed <= 0:
         return 0.0
-    return len(text) / typing_speed
+    delay = len(text) / typing_speed
+    if jitter_ms > 0:
+        delay += uniform(-jitter_ms, jitter_ms) / 1000.0
+    return max(0.0, delay)
 
 
 async def wait_or_interrupt(delay: float, guard: Optional[asyncio.Event] = None) -> bool:

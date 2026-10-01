@@ -1139,6 +1139,15 @@ def _validate_waifu(config: Dict[str, Any], issues: List[ConfigIssue]) -> None:
         elif speed < 0:
             _flag("typing_speed", f"must be >= 0 (0 = no delay), got {speed!r}")
 
+    jitter = waifu.get("typing_jitter_ms")
+    if jitter is not None:
+        if isinstance(jitter, bool) or not isinstance(jitter, (int, float)):
+            _flag("typing_jitter_ms", f"must be whole milliseconds, got {jitter!r}")
+        elif float(jitter) != int(jitter):
+            _flag("typing_jitter_ms", f"must be whole milliseconds, got {jitter!r}")
+        elif jitter < 0:
+            _flag("typing_jitter_ms", f"must be >= 0 (0 = no jitter), got {jitter!r}")
+
     after = waifu.get("interrupt_after")
     if after is not None:
         if isinstance(after, bool) or not isinstance(after, (int, float)):

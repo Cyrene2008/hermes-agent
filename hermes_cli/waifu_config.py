@@ -35,12 +35,26 @@ def _coerce_interrupt_after(raw: Any) -> int:
     return value if value > 0 else 0
 
 
+#: Random +/- ms of human typing wobble on each paced wait. The seeded default; a malformed value
+#: falls back HERE rather than to 0 so the typing illusion survives a bad config.yaml edit.
+DEFAULT_TYPING_JITTER_MS = 93
+
+
+def _coerce_typing_jitter_ms(raw: Any) -> int:
+    """Whole milliseconds >= 0; absent/malformed/negative -> :data:`DEFAULT_TYPING_JITTER_MS`."""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return DEFAULT_TYPING_JITTER_MS
+    value = int(raw)
+    return value if value >= 0 else DEFAULT_TYPING_JITTER_MS
+
+
 @dataclass(frozen=True)
 class WaifuConfig:
     """Typed, validated view of the ``waifu`` section. Every field has an OFF/zero default."""
 
     enabled: bool = False
     typing_speed: float = 0.0
+    typing_jitter_ms: int = DEFAULT_TYPING_JITTER_MS
     interrupt_after: int = 0
     strip_trailing_punctuation: bool = False
     emojis: Dict[str, str] = field(default_factory=dict)
@@ -61,6 +75,7 @@ def read_waifu_config(cfg: Any) -> WaifuConfig:
         # Strict identity, not truthiness: a stray string must never turn the series on.
         enabled=section.get("enabled") is True,
         typing_speed=_coerce_typing_speed(section.get("typing_speed")),
+        typing_jitter_ms=_coerce_typing_jitter_ms(section.get("typing_jitter_ms")),
         interrupt_after=_coerce_interrupt_after(section.get("interrupt_after")),
         strip_trailing_punctuation=section.get("strip_trailing_punctuation") is True,
         emojis=emojis,

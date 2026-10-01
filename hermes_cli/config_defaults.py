@@ -1145,6 +1145,9 @@ DEFAULT_CONFIG = {
         # Typewriter pacing: chars/sec; each bubble waits len(text)/typing_speed seconds before
         # sending. 0 (or empty) = no delay, send immediately. Suggested 0.5-20, default off.
         "typing_speed": 0.0,
+        # Random +/- ms of human typing wobble added to each paced wait (clamped at >= 0); 0 keeps
+        # the metronome. 93 is the tuned "hands shake a little" amount for a paced series.
+        "typing_jitter_ms": 93,
         # Steer/interrupt policy: how many already-planned bubbles still go out after a new user
         # message arrives before the sequence stops. 0 = stop immediately, 1/2/3 = finish N more.
         "interrupt_after": 0,
@@ -1334,6 +1337,11 @@ DEFAULT_CONFIG = {
     "delegation": {
         "model": "",  # e.g. "google/gemini-3-flash-preview" (empty = inherit parent)
         "provider": "",  # e.g. "openrouter" (empty = inherit parent provider + credentials)
+        # false (default): a child freezes provider:model at spawn. true: a RUNNING child
+        # re-reads delegation.provider/model before EACH provider API request and rebinds its
+        # live route in place, so a config change takes effect on that child's next request
+        # without respawning it. No effect on unpinned (pure-inherit) children.
+        "hot_reload_model": False,
         # Fallback chain for delegated children (same entry format as the top-level list).
         # For an unpinned child, null = inherit the parent chain; [] = disable fallback.
         # A child pinned by provider, endpoint, or model gets no fallback unless this

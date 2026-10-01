@@ -4336,11 +4336,12 @@ class BasePlatformAdapter(ABC):
             return
         config = self._waifu_config(event)
         typing_speed = config.typing_speed if config is not None else 0.0
+        jitter_ms = config.typing_jitter_ms if config is not None else 0
         guard = self._waifu_interrupt_guard(session_key)
         reply_to = _reply_anchor_for_event(event)
         for index, bubble in enumerate(bubbles, start=1):
             # Typing pace: one wait per BUBBLE (not per wire chunk), skipped entirely at speed 0.
-            await wait_or_interrupt(waifu_pace_delay(bubble, typing_speed), guard)
+            await wait_or_interrupt(waifu_pace_delay(bubble, typing_speed, jitter_ms), guard)
             for chunk in self._waifu_transport_chunks(event, bubble):
                 try:
                     result, delivery_adapter = await self.send_final_ledgered(

@@ -67,8 +67,33 @@ def test_delay_is_chars_over_speed():
     assert waifu_pace_delay("abcd", 2.0) == pytest.approx(2.0)
 
 
-def test_zero_speed_is_the_instant_path():
-    assert waifu_pace_delay("abcd", 0.0) == 0.0
+def test_zero_speed_is_the_instant_path_even_with_jitter():
+    assert waifu_pace_delay("abcd", 0.0, jitter_ms=500) == 0.0
+
+
+def test_jitter_is_bounded_by_the_configured_milliseconds():
+    lo = waifu_pace_delay("abcdefghij", 1.0, jitter_ms=93, uniform=lambda a, b: a)
+    hi = waifu_pace_delay("abcdefghij", 1.0, jitter_ms=93, uniform=lambda a, b: b)
+    assert lo == pytest.approx(10 - 0.093)
+    assert hi == pytest.approx(10 + 0.093)
+
+
+def test_jitter_never_makes_a_wait_negative():
+    # A tiny bubble (1 char = 1ms at 1000 cps) hit by the full -93ms jitter clamps to 0.
+    assert waifu_pace_delay("x", 1000.0, jitter_ms=93, uniform=lambda a, b: a) == 0.0
+
+
+def test_series_passes_the_configured_jitter(monkeypatch):
+    seen: list = []
+    stub = _make_stub(config=WaifuConfig(enabled=True, typing_speed=4.0, typing_jitter_ms=7), sends=[])
+
+    def _record(text, typing_speed, jitter_ms=0):
+        seen.append((text, typing_speed, jitter_ms))
+        return 0.0
+
+    monkeypatch.setattr(helpers, "waifu_pace_delay", _record)
+    _run(stub._dispatch_final_text(_event(), "sk", "one\n\ntwo", {}, False, 0, lambda _r: None))
+    assert seen == [("one", 4.0, 7), ("two", 4.0, 7)]
 
 
 # ── the interruptible wait ────────────────────────────────────────────────────
@@ -120,7 +145,7 @@ def test_series_waits_per_bubble_before_sending(monkeypatch):
     sends: list = []
     stub = _make_stub(config=WaifuConfig(enabled=True, typing_speed=10.0), sends=sends)
 
-    def _record_delay(text, typing_speed):
+    def _record_delay(text, typing_speed, jitter_ms=0):
         delays.append((text, typing_speed))
         return 0.0
 
