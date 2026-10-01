@@ -1,9 +1,10 @@
 """Tests for native Waifu-Mode emoji/sticker bubbles (功能B, slice: ``waifu.emojis_enabled``).
 
 Contract under test:
-  * a ``[emoji:NAME]`` token whose NAME maps to an existing file sends that bubble as a native
-    IMAGE through the platform rich-media path (QQ ``msg_type=7``), with the bubble's remaining
-    text as its caption;
+  * a ``[emoji:NAME]`` token whose NAME maps to an existing file sends the sticker as a native
+    IMAGE through the platform rich-media path (QQ ``msg_type=7``) ALONE — 表情包单独成一条,
+    no caption — and the bubble's remaining text follows as the series' NEXT text bubble (an
+    empty remainder means the sticker is the whole bubble);
   * a mapped-but-missing file logs and falls back to TEXT, and the token is never shown;
   * an unresolved token (NAME absent from the map) is dropped from the visible text;
   * ``emojis_enabled=false`` leaves the bubble byte-for-byte untouched (token and all) and sends
@@ -95,7 +96,7 @@ def test_waifu_emoji_send_unresolved_token_returns_text_unchanged():
 
 # ── series wiring ────────────────────────────────────────────────────────────
 
-def test_token_maps_to_existing_file_sends_image_with_caption(tmp_path):
+def test_token_maps_to_existing_file_sends_image_alone_then_leftover_text(tmp_path):
     img = tmp_path / "happy.png"
     img.write_bytes(b"\x89PNG\r\n")
     config = WaifuConfig(enabled=True, typing_speed=0.0, emojis_enabled=True,
@@ -105,8 +106,24 @@ def test_token_maps_to_existing_file_sends_image_with_caption(tmp_path):
     stub = _make_stub(config=config, texts=texts, images=images)
     _run(stub._dispatch_final_text(
         _event(), "sk", "hi\n\n[emoji:happy] good morning", {}, False, 0, lambda _r: None))
-    assert texts == ["hi"]                       # plain bubble unaffected
-    assert images == [(str(img), "good morning")]  # sticker + remaining text as caption
+    # 表情包单独成一条: the sticker is its own message (no caption), then the leftover text is the
+    # very next text bubble in the series; the plain bubble before it is unaffected.
+    assert texts == ["hi", "good morning"]
+    assert images == [(str(img), None)]
+
+
+def test_empty_leftover_sends_the_sticker_alone(tmp_path):
+    img = tmp_path / "happy.png"
+    img.write_bytes(b"\x89PNG\r\n")
+    config = WaifuConfig(enabled=True, typing_speed=0.0, emojis_enabled=True,
+                         emojis={"happy": str(img)})
+    texts: list = []
+    images: list = []
+    stub = _make_stub(config=config, texts=texts, images=images)
+    _run(stub._dispatch_final_text(
+        _event(), "sk", "hi\n\n[emoji:happy]", {}, False, 0, lambda _r: None))
+    assert texts == ["hi"]              # nothing left over: no empty text bubble
+    assert images == [(str(img), None)]
 
 
 def test_missing_image_logs_and_falls_back_to_text(tmp_path, caplog):
@@ -162,6 +179,6 @@ def test_sticker_send_failure_is_recorded_and_series_continues(tmp_path, caplog)
     with caplog.at_level(logging.WARNING):
         _run(stub._dispatch_final_text(
             _event(), "sk", "[emoji:happy] one\n\nplain two", {}, False, 0, recorded.append))
-    assert images == [(str(img), "one")]
-    assert texts == ["plain two"]                # the series kept going
-    assert [r.success for r in recorded] == [False, True]
+    assert images == [(str(img), None)]          # image alone, no caption
+    assert texts == ["one", "plain two"]         # leftover words still ride out; series kept going
+    assert [r.success for r in recorded] == [False, True, True]

@@ -121,8 +121,9 @@ def test_series_ledgers_every_bubble_and_sticker(tmp_path, monkeypatch):
     lines = [json.loads(l) for l in (tmp_path / "waifu_ledger.jsonl").read_text(
         encoding="utf-8").splitlines()]
     assert [(r["kind"], r["index"], r["success"]) for r in lines] == [
-        ("text", 1, True), ("sticker", 2, True), ("text", 3, True)]
-    assert [r["total"] for r in lines] == [3, 3, 3]
-    assert lines[1]["chars"] == len("two words")
+        ("text", 1, True), ("sticker", 2, True), ("text", 2, True), ("text", 3, True)]
+    assert [r["total"] for r in lines] == [3, 3, 3, 3]
+    assert lines[1]["chars"] == 0                     # the sticker image carries no text
+    assert lines[2]["chars"] == len("two words")      # the leftover text is its own bubble
     # Metadata only — the ledger never stores the chat text.
     assert "text" not in lines[0] and "content" not in lines[0]

@@ -501,10 +501,11 @@ WAIFU_EMOJI_TOKEN_RE = re.compile(r"\[emoji:([^\]\s]+)\]")
 def waifu_emoji_send(text, emojis) -> "tuple[str | None, str]":
     """Resolve the first ``[emoji:NAME]`` token of one bubble against ``waifu.emojis``.
 
-    Returns ``(image_path, caption)``: the first NAME that maps to a path becomes an image send and
-    the bubble's remaining text (all tokens stripped) rides along as its caption. ``(None, text)``
-    when no token resolves, so a bubble the user did not map goes out as plain text — the model's
-    words are never dropped.
+    Returns ``(image_path, remainder)``: the first NAME that maps to a path becomes the sticker
+    image, and ``remainder`` is the bubble's remaining text with ALL tokens stripped. The caller
+    delivers them as TWO messages — 表情包单独成一条: the image goes out ALONE, then ``remainder``
+    (when non-empty) as the bubble's own next text bubble. ``(None, text)`` when no token resolves,
+    so a bubble the user did not map goes out as plain text — the model's words are never dropped.
     """
     if not isinstance(text, str) or not emojis:
         return None, text

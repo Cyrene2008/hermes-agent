@@ -4367,10 +4367,12 @@ class BasePlatformAdapter(ABC):
 
         The bubbles are the agent-side split (``split_waifu_bubbles``): the conversation log
         already carries one assistant row per bubble, written pre-send like any normal outbound
-        message, so this path adds no rows. A mid-series failure STOPS the series at that bubble
-        and is logged — never raised into ``_notify_turn_error`` — matching the log to what the
-        user actually received. A single bubble (or a split failure) falls back to the normal
-        single send so behavior is identical without a real series.
+        message, so this path adds no rows — a sticker bubble stays ONE log row even though it
+        goes out as an image plus (when non-empty) its leftover text as the next text bubble. A
+        mid-series failure STOPS the series at that bubble and is logged — never raised into
+        ``_notify_turn_error`` — matching the log to what the user actually received. A single
+        bubble (or a split failure) falls back to the normal single send so behavior is identical
+        without a real series.
         """
         from gateway.platforms.helpers import (
             WAIFU_EMOJI_TOKEN_RE, split_waifu_bubbles, strip_waifu_trailing_punctuation,
@@ -4402,22 +4404,31 @@ class BasePlatformAdapter(ABC):
             # Typing pace: one wait per BUBBLE (not per wire chunk), skipped entirely at speed 0.
             await wait_or_interrupt(waifu_pace_delay(bubble, typing_speed, jitter_ms), guard)
             if emojis_enabled:
-                image_path, _caption = waifu_emoji_send(bubble, emojis)
-                if image_path is not None:
-                    if os.path.isfile(image_path):
-                        sticker_result = await self._send_waifu_sticker(
-                            event, image_path, _caption, metadata, reply_to=reply_to,
-                            ephemeral_ttl=ephemeral_ttl, record_delivery=record_delivery)
-                        self._waifu_ledger_record(
-                            session_key=session_key, index=index, total=len(bubbles),
-                            kind="sticker", chars=len(_caption), result=sticker_result)
+                image_path, remainder = waifu_emoji_send(bubble, emojis)
+                if image_path is not None and os.path.isfile(image_path):
+                    # 表情包必须单独成一条消息: the sticker goes out ALONE (no caption), and the
+                    # bubble's remaining text follows as its OWN next text bubble, so the series is
+                    # [sticker][leftover text]. An empty remainder means the sticker IS the whole
+                    # bubble. A sticker failure is recorded and the words below still ride out.
+                    sticker_result = await self._send_waifu_sticker(
+                        event, image_path, "", metadata, reply_to=reply_to,
+                        ephemeral_ttl=ephemeral_ttl, record_delivery=record_delivery)
+                    self._waifu_ledger_record(
+                        session_key=session_key, index=index, total=len(bubbles),
+                        kind="sticker", chars=0, result=sticker_result)
+                    if not remainder:
                         continue
-                    logger.warning("[%s] waifu emoji image missing for bubble %d/%d: %s",
-                                   self.name, index, len(bubbles), image_path)
-                # No image send: strip the control token so the user never sees ``[emoji:...]``,
-                # keeping every word the model wrote (the stripped remainder is the visible text).
-                if WAIFU_EMOJI_TOKEN_RE.search(bubble):
-                    bubble = WAIFU_EMOJI_TOKEN_RE.sub("", bubble).strip() or bubble
+                    # Pacing between the sticker bubble and its leftover text bubble.
+                    await wait_or_interrupt(waifu_pace_delay(remainder, typing_speed, jitter_ms), guard)
+                    bubble = remainder
+                else:
+                    if image_path is not None:
+                        logger.warning("[%s] waifu emoji image missing for bubble %d/%d: %s",
+                                       self.name, index, len(bubbles), image_path)
+                    # No image send: strip the control token so the user never sees ``[emoji:...]``,
+                    # keeping every word the model wrote (the stripped remainder is the visible text).
+                    if WAIFU_EMOJI_TOKEN_RE.search(bubble):
+                        bubble = WAIFU_EMOJI_TOKEN_RE.sub("", bubble).strip() or bubble
             for chunk in self._waifu_transport_chunks(event, bubble):
                 try:
                     result, delivery_adapter = await self.send_final_ledgered(
