@@ -4267,19 +4267,34 @@ class BasePlatformAdapter(ABC):
         await self._send_final_text(
             event, session_key, text_content, metadata, is_ephemeral_response, ephemeral_ttl, record_delivery)
 
-    def _waifu_delivery_enabled(self, event: MessageEvent) -> bool:
-        """``waifu.enabled`` from the gateway's raw effective config; any read failure is OFF.
+    def _waifu_config(self, event: MessageEvent):
+        """The typed ``waifu`` section from the gateway's raw effective config; ``None`` if unreadable.
 
         The gateway does not merge ``DEFAULT_CONFIG``, so an absent/malformed section must read
-        OFF — never crash the send path.
+        all-OFF — never crash the send path.
         """
         try:
             from gateway.run import _load_gateway_config
             from hermes_cli.waifu_config import read_waifu_config
-            return read_waifu_config(_load_gateway_config()).enabled
+            return read_waifu_config(_load_gateway_config())
         except Exception:
             logger.debug("[%s] waifu config read failed", self.name, exc_info=True)
-            return False
+            return None
+
+    def _waifu_delivery_enabled(self, event: MessageEvent) -> bool:
+        """``waifu.enabled``; any read failure is OFF, leaving the single-send path untouched."""
+        config = self._waifu_config(event)
+        return bool(config is not None and config.enabled)
+
+    def _waifu_interrupt_guard(self, session_key: str) -> Optional[asyncio.Event]:
+        """The session's interrupt event, set when a new inbound message arrives (steer).
+
+        Pacing waits on it so an already-planned series never keeps the delivery path asleep after
+        the user has spoken again. A transport-less adapter (unit tests) simply has no guard.
+        """
+        sessions = getattr(self, "_active_sessions", None)
+        guard = sessions.get(session_key) if isinstance(sessions, dict) else None
+        return guard if isinstance(guard, asyncio.Event) else None
 
     def _waifu_transport_chunks(self, event: MessageEvent, bubble: str) -> "list[str]":
         """Split one bubble for the wire when it exceeds the platform cap (fences stay balanced)."""
@@ -4309,7 +4324,7 @@ class BasePlatformAdapter(ABC):
         user actually received. A single bubble (or a split failure) falls back to the normal
         single send so behavior is identical without a real series.
         """
-        from gateway.platforms.helpers import split_waifu_bubbles
+        from gateway.platforms.helpers import split_waifu_bubbles, wait_or_interrupt, waifu_pace_delay
         try:
             bubbles = split_waifu_bubbles(text_content)
         except Exception as exc:
@@ -4319,8 +4334,13 @@ class BasePlatformAdapter(ABC):
             await self._send_final_text(
                 event, session_key, text_content, metadata, is_ephemeral_response, ephemeral_ttl, record_delivery)
             return
+        config = self._waifu_config(event)
+        typing_speed = config.typing_speed if config is not None else 0.0
+        guard = self._waifu_interrupt_guard(session_key)
         reply_to = _reply_anchor_for_event(event)
         for index, bubble in enumerate(bubbles, start=1):
+            # Typing pace: one wait per BUBBLE (not per wire chunk), skipped entirely at speed 0.
+            await wait_or_interrupt(waifu_pace_delay(bubble, typing_speed), guard)
             for chunk in self._waifu_transport_chunks(event, bubble):
                 try:
                     result, delivery_adapter = await self.send_final_ledgered(

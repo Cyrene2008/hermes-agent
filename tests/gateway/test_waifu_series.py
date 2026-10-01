@@ -22,6 +22,7 @@ from gateway.platforms.base import BasePlatformAdapter, SendResult
 from gateway.platforms.event import MessageEvent
 from gateway.platforms.helpers import split_waifu_bubbles
 from gateway.session import SessionSource, SessionStore
+from hermes_cli.waifu_config import WaifuConfig
 
 
 class _StubAdapter:
@@ -31,6 +32,9 @@ class _StubAdapter:
     _dispatch_final_text = BasePlatformAdapter._dispatch_final_text
     _send_waifu_series = BasePlatformAdapter._send_waifu_series
     _waifu_transport_chunks = BasePlatformAdapter._waifu_transport_chunks
+    _waifu_interrupt_guard = BasePlatformAdapter._waifu_interrupt_guard
+    _waifu_config = BasePlatformAdapter._waifu_config
+    _waifu_delivery_enabled = BasePlatformAdapter._waifu_delivery_enabled
 
 
 def _event(chat_id: str = "c1") -> MessageEvent:
@@ -40,9 +44,10 @@ def _event(chat_id: str = "c1") -> MessageEvent:
     )
 
 
-def _make_stub(*, enabled, sends, finals, cap=None, fail_at=None, raise_at=None):
+def _make_stub(*, enabled, sends, finals, cap=None, fail_at=None, raise_at=None, config=None):
     stub = _StubAdapter()
     stub._waifu_delivery_enabled = lambda _event: enabled
+    stub._waifu_config = lambda _event: config if config is not None else WaifuConfig()
     stub.max_message_length_for_chat = lambda _chat_id: cap
     stub.message_len_fn_for_chat = lambda _chat_id: len
 

@@ -491,6 +491,36 @@ def split_waifu_bubbles(text, max_length=None, len_fn=None) -> "list[str]":
     return bubbles
 
 
+def waifu_pace_delay(text, typing_speed) -> float:
+    """Seconds to wait before sending one Waifu-Mode bubble at ``typing_speed`` chars/sec.
+
+    ``typing_speed <= 0`` is the instant path: no delay at all.
+    """
+    if typing_speed <= 0:
+        return 0.0
+    return len(text) / typing_speed
+
+
+async def wait_or_interrupt(delay: float, guard: Optional[asyncio.Event] = None) -> bool:
+    """Sleep *delay* seconds for typing pacing, cut short when *guard* is set.
+
+    *guard* is the session's interrupt event, set when a new inbound user message arrives (steer):
+    an already-planned series must not keep the delivery path asleep after the user has spoken
+    again. Returns True when the full delay elapsed, False when the guard fired first. Task
+    cancellation propagates untouched, so a cancelled turn never waits on the sleep.
+    """
+    if delay <= 0:
+        return True
+    if guard is None:
+        await asyncio.sleep(delay)
+        return True
+    try:
+        await asyncio.wait_for(guard.wait(), timeout=delay)
+        return False
+    except asyncio.TimeoutError:
+        return True
+
+
 def infer_block_separator(prev_chunk: str, next_chunk: str) -> str:
     """``'\\n'`` when the boundary sits at a code fence or a continued table, else ``'\\n\\n'``."""
     prev_trimmed = prev_chunk.rstrip()
