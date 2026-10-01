@@ -69,6 +69,7 @@ class WaifuConfig:
     strip_trailing_punctuation: bool = False
     emojis_enabled: bool = False
     emojis: Dict[str, str] = field(default_factory=dict)
+    immersive: bool = False
 
 
 def read_waifu_config(cfg: Any) -> WaifuConfig:
@@ -91,6 +92,7 @@ def read_waifu_config(cfg: Any) -> WaifuConfig:
         strip_trailing_punctuation=section.get("strip_trailing_punctuation") is True,
         emojis_enabled=section.get("emojis_enabled") is True,
         emojis=emojis,
+        immersive=section.get("immersive") is True,
     )
 
 

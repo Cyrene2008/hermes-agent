@@ -62,6 +62,8 @@ class TurnContext:
     persist_user_display_metadata: Optional[dict] = None
     user_config: Any = None
     mute_notification_reply: bool = False
+    # Waifu-Mode immersive: suppress Hermes system notices (status lines, explainers) for the turn.
+    waifu_immersive: bool = False
     enabled_toolsets: Any = None
     disabled_toolsets: Any = None
     log_mode_enabled: bool = False

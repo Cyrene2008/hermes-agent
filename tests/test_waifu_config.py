@@ -29,6 +29,7 @@ WAIFU_DEFAULTS = {
     "strip_trailing_punctuation": False,
     "emojis_enabled": False,
     "emojis": {},
+    "immersive": False,
 }
 
 
@@ -45,6 +46,7 @@ class TestDefaults:
         assert isinstance(waifu["strip_trailing_punctuation"], bool)
         assert waifu["emojis_enabled"] is False
         assert waifu["emojis"] == {}
+        assert waifu["immersive"] is False
 
     def test_seeded_pace_matches_the_reader_factory_default(self):
         # Seeded DEFAULT_CONFIG and the raw-effective reader must agree: the gateway never merges
@@ -54,7 +56,8 @@ class TestDefaults:
     def test_keys_are_known_to_config_set(self):
         # Seeding DEFAULT_CONFIG is what registers the section: there is no separate schema.
         for key in ("waifu.enabled", "waifu.typing_speed", "waifu.typing_jitter_ms",
-                    "waifu.interrupt_after", "waifu.strip_trailing_punctuation", "waifu.emojis_enabled"):
+                    "waifu.interrupt_after", "waifu.strip_trailing_punctuation", "waifu.emojis_enabled",
+                    "waifu.immersive"):
             assert _validate_config_key(key) == (True, None), key
         # The empty ``emojis`` mapping is an open-subkey section: user-chosen names validate free.
         assert _validate_config_key("waifu.emojis.happy") == (True, None)
@@ -91,6 +94,8 @@ class TestValidation:
         ({"typing_jitter_ms": 1.5}, "typing_jitter_ms"),
         ({"interrupt_after": -2}, "interrupt_after"),
         ({"enabled": "yes"}, "enabled"),
+        ({"emojis_enabled": "yes"}, "emojis_enabled"),
+        ({"immersive": "yes"}, "immersive"),
     ])
     def test_bad_values_rejected(self, section, key):
         issues = validate_config_structure({"waifu": section})

@@ -34,6 +34,7 @@ def _wire(user_config):
         user_config=user_config,
         source=types.SimpleNamespace(platform="telegram"),
         mute_notification_reply=False,
+        waifu_immersive=False,
         _thinking_enabled=False,
         agent_holder=[None],
         tools_holder=[None],

@@ -848,6 +848,8 @@ class TurnRunner:
 
     def _send_status_text(self, text: str, metadata, log_message: str) -> None:
         ctx = self._ctx
+        if ctx.waifu_immersive:
+            return
         self._schedule(ctx._status_adapter.send(ctx._status_chat_id, text, metadata=metadata), log_message)
 
     def _attach_session_title_callback(self, agent, ctx) -> None:
@@ -885,7 +887,7 @@ class TurnRunner:
         from gateway.run import _prepare_gateway_status_message, _redact_gateway_user_facing_secrets, _send_or_update_status_coro
         from gateway.warning_notifications import is_warning_status, render_notification
         ctx = self._ctx
-        if ctx.mute_notification_reply or not self._status_live():
+        if ctx.mute_notification_reply or ctx.waifu_immersive or not self._status_live():
             return
         prepared = _prepare_gateway_status_message(ctx.source.platform, event_type, message)
         if prepared is None:
@@ -909,7 +911,7 @@ class TurnRunner:
 
     def _setup_stream_consumer(self, platform_key):
         ctx = self._ctx
-        if ctx.mute_notification_reply:
+        if ctx.mute_notification_reply or ctx.waifu_immersive:
             return None, None, None, False
         stream_consumer = None
         # The streaming-TTS consumer is created on the outer loop thread before run_sync launches;
@@ -1175,7 +1177,7 @@ class TurnRunner:
         sync worker thread; hop onto the gateway loop. Fired-once latch lives on the cached agent."""
         from gateway.run import render_notice_line
         from gateway.warning_notifications import is_diagnostic_notice, render_notification
-        if self._ctx.mute_notification_reply or not self._status_live():
+        if self._ctx.mute_notification_reply or self._ctx.waifu_immersive or not self._status_live():
             return
         diagnostic = is_diagnostic_notice(notice)
         def present():
@@ -1290,7 +1292,7 @@ class TurnRunner:
         # Thinking between tool calls is independent of tool_progress mode (Mattermost opts in
         # per platform so global scratch-text doesn't leak into threads).
         agent.thinking_progress = ctx._thinking_enabled
-        if ctx.mute_notification_reply:
+        if ctx.mute_notification_reply or ctx.waifu_immersive:
             # Controls and operational event/step callbacks remain wired. These
             # presentation callbacks are rebound on every next turn.
             agent.tool_progress_callback = None

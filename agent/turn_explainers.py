@@ -200,7 +200,9 @@ def _display_flag_enabled(agent, *, env_var: str, config_key: str, cache_attr: s
 
     ``env_var`` overrides on every call and is never cached. Reads the persisted config.yaml
     so gateway and CLI share the setting; ``load_config`` is imported lazily (startup cycle,
-    and tests patch it at ``hermes_cli.config``). Any failure → True (safe default: on)."""
+    and tests patch it at ``hermes_cli.config``). Any failure → True (safe default: on).
+    Waifu-Mode ``waifu.immersive`` is a master mute folded into the SAME config read: when ON,
+    every display flag resolves False (the explicit env override still wins)."""
     try:
         env = os.environ.get(env_var)
         if env is not None:
@@ -218,10 +220,27 @@ def _display_flag_enabled(agent, *, env_var: str, config_key: str, cache_attr: s
             enabled = bool(_display.get(config_key))
         else:
             enabled = True
+        # Waifu-Mode immersive is a master mute for Hermes' own notices: ON forces every
+        # ``display.*`` explainer flag off. The explicit env override above still wins.
+        if enabled and _waifu_immersive_from_config(_cfg):
+            enabled = False
         setattr(agent, cache_attr, enabled)
         return enabled
     except Exception:
         return True
+
+
+def _waifu_immersive_from_config(cfg) -> bool:
+    """``waifu.immersive`` from an already-loaded config mapping; False when absent/malformed.
+
+    Waifu-Mode immersive is a master mute for Hermes' own system notices (status lines, the
+    file-mutation footer, the turn-completion explainer): reading it from the SAME config the
+    display flags read keeps the per-agent config lookup at exactly one call."""
+    try:
+        from hermes_cli.waifu_config import read_waifu_config
+        return bool(read_waifu_config(cfg).immersive)
+    except Exception:
+        return False
 
 
 class TurnExplainersMixin:

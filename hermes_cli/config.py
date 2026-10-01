@@ -1132,6 +1132,8 @@ def _validate_waifu(config: Dict[str, Any], issues: List[ConfigIssue]) -> None:
               f"must be true or false, got {waifu.get('strip_trailing_punctuation')!r}")
     if "emojis_enabled" in waifu and not isinstance(waifu.get("emojis_enabled"), bool):
         _flag("emojis_enabled", f"must be true or false, got {waifu.get('emojis_enabled')!r}")
+    if "immersive" in waifu and not isinstance(waifu.get("immersive"), bool):
+        _flag("immersive", f"must be true or false, got {waifu.get('immersive')!r}")
 
     speed = waifu.get("typing_speed")
     if speed is not None:

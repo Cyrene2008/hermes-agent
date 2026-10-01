@@ -3069,6 +3069,13 @@ class GatewayTurnMixin:
         turn_runner = TurnRunner(self, turn_ctx)
         turn_ctx.mute_notification_reply = diagnostic_turn_muted(
             turn_ctx.persist_user_display_metadata, source.platform, turn_ctx.user_config)
+        # Waifu-Mode immersive reads the same raw effective config the bubble path uses; a read
+        # failure is OFF (notices unchanged).
+        try:
+            from hermes_cli.waifu_config import read_waifu_config
+            turn_ctx.waifu_immersive = bool(read_waifu_config(turn_ctx.user_config).immersive)
+        except Exception:
+            turn_ctx.waifu_immersive = False
         # Agent tool-lifecycle callbacks live on the runner (bound methods, same signatures).
         turn_ctx.progress_callback = turn_runner.progress_callback
         turn_ctx.voice_ack_callback = turn_runner.voice_ack_callback

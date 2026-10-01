@@ -1161,6 +1161,10 @@ DEFAULT_CONFIG = {
         "emojis_enabled": False,
         # Emoji/sticker name -> image path; an emoji token in a bubble sends as an image message.
         "emojis": {},
+        # Immersive mode: when true, Hermes' own system notices (tool/live status lines, file-
+        # mutation + turn-completion explainers) are suppressed so the chat reads as pure
+        # character dialogue. false is byte-for-byte the existing behavior.
+        "immersive": False,
     },
 
     "stt": {
