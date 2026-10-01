@@ -2403,6 +2403,10 @@ def init_agent(
     # Every (provider, model) that rejected image content this session. build_api_request strips
     # images from requests to those models only, so history keeps them for any model that can see.
     agent._image_rejecting_models = set()
+    # Same ledger for audio: a model that 4xx'd on input_audio gets text-only requests from
+    # strip_unsupported_audio_parts (agent/audio_routing) for the rest of the session, even
+    # under media.native_audio: on — the override is a routing preference, not a retry licence.
+    agent._audio_rejecting_models = set()
 
     _init_prompt_cache_config(agent)
     _init_turn_state(agent, run_budget_seconds)
