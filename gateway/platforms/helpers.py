@@ -515,6 +515,34 @@ def waifu_emoji_send(text, emojis) -> "tuple[str | None, str]":
     return None, text
 
 
+#: Trailing sentence-READING characters the ``strip_trailing_punctuation`` switch removes from an
+#: outbound Waifu bubble: the period/comma/semicolon tails (CJK and ASCII) plus trailing whitespace.
+#: Emotion-bearing marks are deliberately ABSENT — ``？ ? ！ ! … ~ ～ ♪`` and emoji are not here, so
+#: the scan below stops on them and a question/exclamation/ellipsis ending survives verbatim.
+WAIFU_STRIPPABLE_TAIL_CHARS = "。．.，,、;； \t\n\r\x0b\x0c\u3000"
+
+
+def strip_waifu_trailing_punctuation(text):
+    """Drop ONLY sentence-reading tail characters from one outbound Waifu bubble (句末标点处理).
+
+    去掉句读类结尾（。．. ／ ，, ／ 、 ／ ; ； 以及尾部空白），遇到第一个承载情绪或语义的字符就
+    停：``？ ? ！ ! …``（含 ``……？`` ``？？`` ``！！`` 这类重复）、``~ ～ ♪``、emoji 以及任何不
+    在去除集里的字符全部原样保留 —— ``好呀。`` -> ``好呀``，``我服了。`` -> ``我服了``，而
+    ``真的吗？`` / ``……`` / ``啊！`` / ``好呀♪`` / ``好呀😊`` 一律不变。
+
+    只影响出站显示：对话日志在发送前就按原文写入，这里改不到它。整条气泡若全是被去除的标点则原样
+    返回，绝不产出空串（网关侧会丢弃空气泡）。
+    """
+    if not isinstance(text, str) or not text:
+        return text
+    end = len(text)
+    while end > 0 and text[end - 1] in WAIFU_STRIPPABLE_TAIL_CHARS:
+        end -= 1
+    if end == 0:
+        return text
+    return text[:end]
+
+
 def waifu_pace_delay(text, typing_speed, jitter_ms=0, *, uniform: Callable[[float, float], float] = random.uniform) -> float:
     """Seconds to wait before sending one Waifu-Mode bubble at ``typing_speed`` chars/sec.
 

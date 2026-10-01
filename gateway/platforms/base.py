@@ -4373,18 +4373,25 @@ class BasePlatformAdapter(ABC):
         single send so behavior is identical without a real series.
         """
         from gateway.platforms.helpers import (
-            WAIFU_EMOJI_TOKEN_RE, split_waifu_bubbles, wait_or_interrupt, waifu_emoji_send,
-            waifu_pace_delay)
+            WAIFU_EMOJI_TOKEN_RE, split_waifu_bubbles, strip_waifu_trailing_punctuation,
+            wait_or_interrupt, waifu_emoji_send, waifu_pace_delay)
         try:
             bubbles = split_waifu_bubbles(text_content)
         except Exception as exc:
             logger.warning("[%s] waifu bubble split failed, sending as one: %s", self.name, exc, exc_info=True)
             bubbles = []
-        if len(bubbles) <= 1:
-            await self._send_final_text(
-                event, session_key, text_content, metadata, is_ephemeral_response, ephemeral_ttl, record_delivery)
-            return
         config = self._waifu_config(event)
+        # 句末标点处理: strip only sentence-reading tails (。．.，,、;； + trailing spaces) from the
+        # OUTBOUND bubble; emotion-bearing endings (？！…~♪, repeats, emoji) survive. The conversation
+        # log was already written pre-send, so it keeps the original text untouched.
+        strip_punct = bool(config is not None and config.strip_trailing_punctuation)
+        if strip_punct and bubbles:
+            bubbles = [strip_waifu_trailing_punctuation(bubble) for bubble in bubbles]
+        if len(bubbles) <= 1:
+            fallback_text = strip_waifu_trailing_punctuation(text_content) if strip_punct else text_content
+            await self._send_final_text(
+                event, session_key, fallback_text, metadata, is_ephemeral_response, ephemeral_ttl, record_delivery)
+            return
         typing_speed = config.typing_speed if config is not None else 0.0
         jitter_ms = config.typing_jitter_ms if config is not None else 0
         emojis_enabled = bool(config is not None and config.emojis_enabled)
