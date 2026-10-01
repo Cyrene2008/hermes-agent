@@ -492,6 +492,29 @@ def split_waifu_bubbles(text, max_length=None, len_fn=None) -> "list[str]":
     return bubbles
 
 
+# ── Waifu-Mode pacing + stickers (see hermes_cli/waifu_config.py for the section) ─────────────
+
+#: ``[emoji:NAME]`` marks a bubble as a sticker; NAME keys the ``waifu.emojis`` mapping.
+WAIFU_EMOJI_TOKEN_RE = re.compile(r"\[emoji:([^\]\s]+)\]")
+
+
+def waifu_emoji_send(text, emojis) -> "tuple[str | None, str]":
+    """Resolve the first ``[emoji:NAME]`` token of one bubble against ``waifu.emojis``.
+
+    Returns ``(image_path, caption)``: the first NAME that maps to a path becomes an image send and
+    the bubble's remaining text (all tokens stripped) rides along as its caption. ``(None, text)``
+    when no token resolves, so a bubble the user did not map goes out as plain text — the model's
+    words are never dropped.
+    """
+    if not isinstance(text, str) or not emojis:
+        return None, text
+    for name in WAIFU_EMOJI_TOKEN_RE.findall(text):
+        path = emojis.get(name)
+        if isinstance(path, str) and path:
+            return path, WAIFU_EMOJI_TOKEN_RE.sub("", text).strip()
+    return None, text
+
+
 def waifu_pace_delay(text, typing_speed, jitter_ms=0, *, uniform: Callable[[float, float], float] = random.uniform) -> float:
     """Seconds to wait before sending one Waifu-Mode bubble at ``typing_speed`` chars/sec.
 

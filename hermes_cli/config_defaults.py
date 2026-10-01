@@ -1155,6 +1155,10 @@ DEFAULT_CONFIG = {
         # Strip trailing sentence punctuation (。！？,.!?~ …) from the OUTBOUND bubble only so it
         # reads casually; the conversation log keeps the original text. ♪/emoji endings survive.
         "strip_trailing_punctuation": False,
+        # Emoji/sticker bubbles: when true, an ``[emoji:NAME]`` token in a bubble resolves through
+        # the ``emojis`` map below and the bubble is sent as an IMAGE (QQ msg_type=7) with the
+        # remaining text as its caption; an unresolvable or missing image falls back to text.
+        "emojis_enabled": False,
         # Emoji/sticker name -> image path; an emoji token in a bubble sends as an image message.
         "emojis": {},
     },

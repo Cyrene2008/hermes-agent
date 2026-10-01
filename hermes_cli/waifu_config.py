@@ -67,6 +67,7 @@ class WaifuConfig:
     typing_jitter_ms: int = DEFAULT_TYPING_JITTER_MS
     interrupt_after: int = 0
     strip_trailing_punctuation: bool = False
+    emojis_enabled: bool = False
     emojis: Dict[str, str] = field(default_factory=dict)
 
 
@@ -88,6 +89,7 @@ def read_waifu_config(cfg: Any) -> WaifuConfig:
         typing_jitter_ms=_coerce_typing_jitter_ms(section.get("typing_jitter_ms")),
         interrupt_after=_coerce_interrupt_after(section.get("interrupt_after")),
         strip_trailing_punctuation=section.get("strip_trailing_punctuation") is True,
+        emojis_enabled=section.get("emojis_enabled") is True,
         emojis=emojis,
     )
 

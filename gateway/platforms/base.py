@@ -4311,6 +4311,28 @@ class BasePlatformAdapter(ABC):
                 return chunks
         return [bubble]
 
+    async def _send_waifu_sticker(
+        self, event: MessageEvent, image_path: str, caption: str, metadata: Dict[str, Any], *,
+        reply_to: Optional[str], ephemeral_ttl: int, record_delivery: Callable,
+    ) -> None:
+        """Send one Waifu-Mode bubble as a native IMAGE (QQ ``msg_type=7``) via the platform's
+        rich-media path; ``caption`` is the bubble's remaining text and may be empty. A raise or a
+        refused send is logged and recorded, never raised into ``_notify_turn_error``; the series
+        continues so a single bad sticker cannot silence the rest of the turn."""
+        try:
+            result = await self.send_image_file(
+                chat_id=event.source.chat_id, image_path=image_path,
+                caption=caption or None, reply_to=reply_to, metadata=metadata)
+        except Exception as exc:
+            logger.error("[%s] waifu sticker send raised: %s", self.name, exc, exc_info=True)
+            record_delivery(SendResult(success=False, error=str(exc)))
+            return
+        record_delivery(result)
+        if ephemeral_ttl and ephemeral_ttl > 0 and result.success and result.message_id:
+            self._schedule_ephemeral_delete(event.source.chat_id, result.message_id, ephemeral_ttl)
+        if not result.success:
+            logger.warning("[%s] waifu sticker failed: %s", self.name, getattr(result, "error", None))
+
     async def _send_waifu_series(
         self, event: MessageEvent, session_key: str, text_content: str, metadata: Dict[str, Any], *,
         is_ephemeral_response: bool, ephemeral_ttl: int, record_delivery: Callable,
@@ -4324,7 +4346,9 @@ class BasePlatformAdapter(ABC):
         user actually received. A single bubble (or a split failure) falls back to the normal
         single send so behavior is identical without a real series.
         """
-        from gateway.platforms.helpers import split_waifu_bubbles, wait_or_interrupt, waifu_pace_delay
+        from gateway.platforms.helpers import (
+            WAIFU_EMOJI_TOKEN_RE, split_waifu_bubbles, wait_or_interrupt, waifu_emoji_send,
+            waifu_pace_delay)
         try:
             bubbles = split_waifu_bubbles(text_content)
         except Exception as exc:
@@ -4337,11 +4361,27 @@ class BasePlatformAdapter(ABC):
         config = self._waifu_config(event)
         typing_speed = config.typing_speed if config is not None else 0.0
         jitter_ms = config.typing_jitter_ms if config is not None else 0
+        emojis_enabled = bool(config is not None and config.emojis_enabled)
+        emojis = config.emojis if config is not None else {}
         guard = self._waifu_interrupt_guard(session_key)
         reply_to = _reply_anchor_for_event(event)
         for index, bubble in enumerate(bubbles, start=1):
             # Typing pace: one wait per BUBBLE (not per wire chunk), skipped entirely at speed 0.
             await wait_or_interrupt(waifu_pace_delay(bubble, typing_speed, jitter_ms), guard)
+            if emojis_enabled:
+                image_path, _caption = waifu_emoji_send(bubble, emojis)
+                if image_path is not None:
+                    if os.path.isfile(image_path):
+                        await self._send_waifu_sticker(
+                            event, image_path, _caption, metadata, reply_to=reply_to,
+                            ephemeral_ttl=ephemeral_ttl, record_delivery=record_delivery)
+                        continue
+                    logger.warning("[%s] waifu emoji image missing for bubble %d/%d: %s",
+                                   self.name, index, len(bubbles), image_path)
+                # No image send: strip the control token so the user never sees ``[emoji:...]``,
+                # keeping every word the model wrote (the stripped remainder is the visible text).
+                if WAIFU_EMOJI_TOKEN_RE.search(bubble):
+                    bubble = WAIFU_EMOJI_TOKEN_RE.sub("", bubble).strip() or bubble
             for chunk in self._waifu_transport_chunks(event, bubble):
                 try:
                     result, delivery_adapter = await self.send_final_ledgered(
