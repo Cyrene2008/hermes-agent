@@ -78,6 +78,7 @@ import type { SystemAction } from "@/contexts/system-actions-context";
 // Route pages are lazy-loaded so the initial dashboard shell does not pay for
 // every admin surface (and heavy deps like xterm) up front.
 const ConfigPage = lazy(() => import("@/pages/ConfigPage"));
+const WaifuPage = lazy(() => import("@/pages/WaifuPage"));
 const DocsPage = lazy(() => import("@/pages/DocsPage"));
 const EnvPage = lazy(() => import("@/pages/EnvPage"));
 const FilesPage = lazy(() => import("@/pages/FilesPage"));
@@ -172,6 +173,7 @@ const BUILTIN_ROUTES_CORE: Record<string, ComponentType> = {
   "/profiles": ProfilesPage,
   "/profiles/new": ProfileBuilderPage,
   "/config": ConfigPage,
+  "/waifu": WaifuPage,
   "/env": EnvPage,
   "/docs": DocsPage,
 };
@@ -213,6 +215,7 @@ const BUILTIN_NAV_REST: NavItem[] = [
   { path: "/webhooks", label: "Webhooks", icon: Webhook },
   { path: "/pairing", label: "Pairing", icon: ShieldCheck },
   { path: "/profiles", labelKey: "profiles", label: "Profiles", icon: Users },
+  { path: "/waifu", labelKey: "waifu", label: "Waifu", icon: Heart },
   { path: "/config", labelKey: "config", label: "Config", icon: Settings },
   { path: "/env", labelKey: "keys", label: "Keys", icon: KeyRound },
   { path: "/system", label: "System", icon: Wrench },

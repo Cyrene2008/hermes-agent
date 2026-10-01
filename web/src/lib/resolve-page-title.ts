@@ -11,6 +11,7 @@ const BUILTIN: Record<string, keyof Translations["app"]["nav"]> = {
   "/plugins": "plugins",
   "/profiles": "profiles",
   "/config": "config",
+  "/waifu": "waifu",
   "/env": "keys",
   "/docs": "documentation",
 };
@@ -42,7 +43,10 @@ export function resolvePageTitle(
   }
   const key = BUILTIN[normalized];
   if (key) {
-    return t.app.nav[key];
+    // `nav` gained optional entries (waifu), so an indexed lookup is
+    // `string | undefined`; fall back to the key name rather than leaking
+    // `undefined` into the document title.
+    return t.app.nav[key] ?? String(key);
   }
   const literal = BUILTIN_LITERAL[normalized];
   if (literal) {

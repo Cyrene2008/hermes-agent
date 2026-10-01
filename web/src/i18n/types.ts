@@ -105,6 +105,8 @@ export interface Translations {
       plugins: string;
       sessions: string;
       skills: string;
+      /** Optional — Waifu-Mode nav entry; falls back to the English literal. */
+      waifu?: string;
     };
     modelToolsSheetSubtitle: string;
     modelToolsSheetTitle: string;
@@ -902,5 +904,55 @@ export interface Translations {
       confirmTitle?: string;
       confirmManyTitle?: string;
     };
+  };
+
+  // ── Waifu-Mode page ──
+  // Optional section: only en/zh ship it; other locales fall back to the
+  // English literals merged in by `mergeTranslations`, so adding a section
+  // here must never require touching every locale file.
+  waifu?: {
+    title: string;
+    subtitle: string;
+    masterToggle: string;
+    masterToggleHint: string;
+    typingSpeed: string;
+    typingSpeedHint: string;
+    /** "{value}" is the current chars/sec (or the no-delay label). */
+    typingSpeedValue: string;
+    noDelay: string;
+    noDelayHint: string;
+    /** "{ms}" = jitter in milliseconds. */
+    jitterBadge: string;
+    jitterHint: string;
+    /** Reset-to-default label, carrying the 11.12 anniversary value. */
+    defaultSpeedBadge: string;
+    defaultSpeedHint: string;
+    interruptAfter: string;
+    interruptAfterHint: string;
+    interruptImmediate: string;
+    /** "{n}" = how many more bubbles still go out. */
+    interruptMore: string;
+    stripTrailingPunctuation: string;
+    stripTrailingPunctuationHint: string;
+    emojis: string;
+    emojisHint: string;
+    emojisEnabled: string;
+    emojisEnabledHint: string;
+    emojiName: string;
+    emojiPath: string;
+    emojiNamePlaceholder: string;
+    emojiPathPlaceholder: string;
+    emojiAdd: string;
+    emojiRemove: string;
+    emojiEmpty: string;
+    emojiPreviewFailed: string;
+    immersive: string;
+    immersiveHint: string;
+    /** Accessible label for the corner sticker easter egg. */
+    easterEgg: string;
+    save: string;
+    saved: string;
+    failedToSave: string;
+    loadFailed: string;
   };
 }
