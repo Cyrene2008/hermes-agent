@@ -19,11 +19,11 @@ import pytest
 from hermes_cli.config import DEFAULT_CONFIG, _validate_config_key, validate_config_structure
 from hermes_cli.config_effective import load_user_config_effective
 from hermes_cli.waifu_config import (
-    DEFAULT_TYPING_JITTER_MS, read_waifu_config, waifu_enabled)
+    DEFAULT_TYPING_JITTER_MS, DEFAULT_TYPING_SPEED, read_waifu_config, waifu_enabled)
 
 WAIFU_DEFAULTS = {
     "enabled": False,
-    "typing_speed": 0.0,
+    "typing_speed": DEFAULT_TYPING_SPEED,
     "typing_jitter_ms": DEFAULT_TYPING_JITTER_MS,
     "interrupt_after": 0,
     "strip_trailing_punctuation": False,
@@ -44,6 +44,11 @@ class TestDefaults:
         assert isinstance(waifu["strip_trailing_punctuation"], bool)
         assert waifu["emojis"] == {}
 
+    def test_seeded_pace_matches_the_reader_factory_default(self):
+        # Seeded DEFAULT_CONFIG and the raw-effective reader must agree: the gateway never merges
+        # DEFAULT_CONFIG, so a mismatch would silently change the factory pace.
+        assert DEFAULT_CONFIG["waifu"]["typing_speed"] == DEFAULT_TYPING_SPEED
+
     def test_keys_are_known_to_config_set(self):
         # Seeding DEFAULT_CONFIG is what registers the section: there is no separate schema.
         for key in ("waifu.enabled", "waifu.typing_speed", "waifu.typing_jitter_ms",
@@ -56,7 +61,10 @@ class TestDefaults:
         assert waifu_enabled({}) is False
         assert waifu_enabled({"waifu": {}}) is False
         assert waifu_enabled({"waifu": None}) is False
-        assert read_waifu_config(None).typing_speed == 0.0
+        # The raw-effective read has no DEFAULT_CONFIG merge, so the pacing factory default is
+        # carried by the reader itself: enabling the feature paces without the user setting it.
+        assert read_waifu_config(None).typing_speed == DEFAULT_TYPING_SPEED
+        assert read_waifu_config({}).typing_speed == DEFAULT_TYPING_SPEED
         # Jitter has no OFF reading of its own: absent keeps the seeded typing illusion.
         assert read_waifu_config({}).typing_jitter_ms == DEFAULT_TYPING_JITTER_MS
 
@@ -119,6 +127,19 @@ class TestEffectiveRead:
         path.write_text("waifu:\n  typing_jitter_ms: -4\n", encoding="utf-8")
         assert read_waifu_config(
             load_user_config_effective(path)).typing_jitter_ms == DEFAULT_TYPING_JITTER_MS
+
+    def test_explicit_zero_typing_speed_means_no_delay(self, tmp_path):
+        path = self._config(tmp_path, """
+            waifu:
+              enabled: true
+              typing_speed: 0
+            """)
+        assert read_waifu_config(load_user_config_effective(path)).typing_speed == 0.0
+
+    def test_enabled_without_typing_speed_paces_at_the_factory_default(self, tmp_path):
+        path = self._config(tmp_path, "waifu:\n  enabled: true\n")
+        assert read_waifu_config(
+            load_user_config_effective(path)).typing_speed == DEFAULT_TYPING_SPEED
 
     def test_malformed_values_fall_back_off(self, tmp_path):
         path = self._config(tmp_path, """

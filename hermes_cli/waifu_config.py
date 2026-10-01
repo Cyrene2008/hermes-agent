@@ -18,13 +18,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
+#: Factory typing pace in chars/sec for a paced Waifu-Mode series. 11.12 is deliberate: the
+#: dashboard slider's far end (0.5-20, two decimals) lands exactly on it. 0 still means "no delay".
+DEFAULT_TYPING_SPEED = 11.12
+
 
 def _coerce_typing_speed(raw: Any) -> float:
-    """chars/sec; absent, malformed (incl. ``bool``) or negative -> ``0.0`` (no delay)."""
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        return 0.0
+    """chars/sec; absent/unusable -> the factory default, an explicit negative -> ``0.0`` (no delay)."""
+    if raw is None or isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return DEFAULT_TYPING_SPEED
     speed = float(raw)
-    return speed if speed > 0 else 0.0
+    return speed if speed >= 0 else 0.0
 
 
 def _coerce_interrupt_after(raw: Any) -> int:
@@ -50,10 +54,16 @@ def _coerce_typing_jitter_ms(raw: Any) -> int:
 
 @dataclass(frozen=True)
 class WaifuConfig:
-    """Typed, validated view of the ``waifu`` section. Every field has an OFF/zero default."""
+    """Typed, validated view of the ``waifu`` section. Every field defaults to OFF/neutral.
+
+    ``typing_speed`` is the exception to "zero default": the factory pace (:data:`DEFAULT_TYPING_SPEED`)
+    applies whenever the key is absent, so enabling the feature paces at the documented default
+    without the user setting anything. Only an explicit ``0`` (or a negative, which validation
+    flags) means "no delay".
+    """
 
     enabled: bool = False
-    typing_speed: float = 0.0
+    typing_speed: float = DEFAULT_TYPING_SPEED
     typing_jitter_ms: int = DEFAULT_TYPING_JITTER_MS
     interrupt_after: int = 0
     strip_trailing_punctuation: bool = False

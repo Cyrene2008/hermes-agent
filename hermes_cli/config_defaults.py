@@ -1143,8 +1143,9 @@ DEFAULT_CONFIG = {
     "waifu": {
         "enabled": False,  # master switch; false = unchanged single-reply behavior
         # Typewriter pacing: chars/sec; each bubble waits len(text)/typing_speed seconds before
-        # sending. 0 (or empty) = no delay, send immediately. Suggested 0.5-20, default off.
-        "typing_speed": 0.0,
+        # sending. 0 (or empty) = no delay, send immediately. 11.12 is deliberate: it is the
+        # dashboard slider's far end (range 0.5-20, two decimals).
+        "typing_speed": 11.12,
         # Random +/- ms of human typing wobble added to each paced wait (clamped at >= 0); 0 keeps
         # the metronome. 93 is the tuned "hands shake a little" amount for a paced series.
         "typing_jitter_ms": 93,
