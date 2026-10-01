@@ -7,13 +7,18 @@ Contract under test — one natural sentence / one breath per bubble, target rou
   * a single sentence over ``WAIFU_BUBBLE_SENTENCE_HARD_MAX`` (60) falls back to commas, then
     whitespace; a sentence with neither stays whole and the platform cap is the last net;
   * the explicit ``---`` mode stays fully model-controlled (no breath splitting at all);
-  * inline code spans and still-open quotes are opaque — their enders are not breath points;
-  * sub-``WAIFU_BUBBLE_MIN`` sentences fold into the previous bubble when the pair still fits;
+  * inline code spans, still-open quotes, and ``（…）``/``【…】``/``(…)``/``[…]`` bracket spans are
+    opaque — their enders AND their commas/spaces are not breath points, so a parenthetical
+    behavior span is never torn apart by any pass (sentence, comma or whitespace);
+  * no emitted piece is below ``WAIFU_BUBBLE_MIN`` (a lone unbreakable piece is the exception) —
+    not even after the comma / whitespace fallback, whose lengths are measured on the STRIPPED
+    fragment so a 4-char word carrying its separator (``"mode "``) can never ship alone;
   * the platform-cap re-chunk still runs last, and the emoji/punctuation helpers are unaffected.
 """
 
 from __future__ import annotations
 
+from agent.i18n import t
 from gateway.platforms.helpers import (
     WAIFU_BUBBLE_MIN,
     WAIFU_BUBBLE_SENTENCE_HARD_MAX,
@@ -34,6 +39,13 @@ LONG_FENCE = ("```py\n"
               "x = 1  # 这是很长很长很长很长很长很长的一行注释。后面还有很长很长很长很多的一句话。\n"
               "```")
 LONG_TABLE = "| 列一 | 列二 |\n| --- | --- |\n| 数据数据数据。数据数据数据数据 | 值 |"
+
+#: The exact gateway ``/yolo`` notice — the production word-salad (locales/en.yaml
+#: ``gateway.yolo.enabled``). No CJK ender and no comma, so it falls through to the whitespace
+#: fallback; the raw string still carries the Markdown the platform strips at render time.
+YOLO_NOTICE = t("gateway.yolo.enabled", lang="en")
+#: The same notice as the partner actually saw it (Markdown bold stripped by the platform).
+YOLO_NOTICE_PLAIN = "YOLO mode ON for this session — all commands auto-approved. Use with caution."
 
 
 def test_long_paragraph_splits_into_sentence_breaths():
@@ -90,6 +102,41 @@ def test_long_sentence_without_commas_falls_back_to_whitespace():
     assert all(WAIFU_BUBBLE_MIN <= len(b) <= WAIFU_BUBBLE_SENTENCE_HARD_MAX for b in bubbles)
 
 
+def test_whitespace_fallback_never_ships_a_sub_min_word():
+    """Space-delimited fallback: a short word carrying its separator must not ship alone.
+
+    Pre-fix the merge compared RAW lengths, so ``"mode "`` (5 raw chars) passed the ``>= MIN``
+    gate and then stripped to a 4-char ``"mode"`` micro-bubble — the reported production bug.
+    """
+    # Every word is 2 chars, so raw-length packing would emit one sub-MIN bubble per word.
+    sentence = " ".join(["go"] * 24 + ["now"])            # no ender, no comma → whitespace fallback
+    assert len(sentence) > WAIFU_BUBBLE_SENTENCE_HARD_MAX
+    bubbles = split_waifu_bubbles(sentence)
+    assert len(bubbles) > 1
+    assert all(len(b) >= WAIFU_BUBBLE_MIN for b in bubbles)
+    assert all(b in sentence for b in bubbles)            # whole words, never a mid-word cut
+    assert " ".join(bubbles) == sentence                  # nothing dropped or duplicated
+
+
+def test_yolo_notice_word_salad_regresses_green():
+    """The exact gateway /yolo notice: no piece below MIN, no word-splitting shredding.
+
+    Reproduces the partner's screenshot (one- and two-word bubbles). Pre-fix this split into
+    ['YOLO', 'mode', 'ON for', 'this', 'session', '— all', 'commands', 'auto-approved.',
+     'Use with', 'caution.'] — note the 4-char 'mode'.
+    """
+    for text in (YOLO_NOTICE, YOLO_NOTICE_PLAIN):
+        assert len(text) > WAIFU_BUBBLE_SENTENCE_MAX
+        bubbles = split_waifu_bubbles(text)
+        assert len(bubbles) > 1
+        assert all(len(b) >= WAIFU_BUBBLE_MIN for b in bubbles)
+        assert all(b in text for b in bubbles)
+    # The plain rendering is pinned so the regression cannot silently reappear.
+    assert split_waifu_bubbles(YOLO_NOTICE_PLAIN) == [
+        "YOLO mode", "ON for", "this session", "— all",
+        "commands", "auto-approved.", "Use with", "caution."]
+
+
 def test_unbreakable_blob_has_no_breath_and_stays_whole():
     blob = "a" * 100                       # no ender, no comma, no whitespace → nothing to cut
     assert split_waifu_bubbles(blob) == [blob]
@@ -116,6 +163,52 @@ def test_inline_code_and_open_quote_enders_are_not_breaths():
         "接着又引用了「引用里有句号。这里」然后结束。"]
     assert "`code。still code`" in bubbles[0]
     assert "「引用里有句号。这里」" in bubbles[1]
+
+
+def test_parenthetical_span_is_one_breath_even_across_a_newline():
+    """The partner's exact pair: （歪着头想了想，\\n轻轻笑）对 must not be cut apart."""
+    pair = "（歪着头想了想，\n轻轻笑）对"
+    assert split_waifu_bubbles(pair) == [pair]
+
+    # Comma fallback (atom over HARD_MAX, no enders): the comma INSIDE the parens is not a cut,
+    # only the comma after 对 is — pre-fix the inner comma tore the parenthetical in two.
+    long_text = ("他转过身来" * 8) + "（歪着头想了想，\n轻轻笑）对，" + "我们就这样说定了吧"
+    assert len(long_text) > WAIFU_BUBBLE_SENTENCE_HARD_MAX
+    bubbles = split_waifu_bubbles(long_text)
+    assert "（歪着头想了想，\n轻轻笑）" in bubbles[0]          # opener and closer share a bubble
+    assert all("（" not in b or "）" in b for b in bubbles)     # no boundary inside the parens
+    assert bubbles[-1] == "我们就这样说定了吧"                  # the cut lands on the OUTSIDE comma
+
+
+def test_bracket_enders_and_commas_are_not_breaths():
+    # Sentence ender inside （…） and 【…】 must not cut (same opacity as a quote).
+    text = ("他说" * 10) + "（笑。真的）对呀" + "好呀。" * 6
+    assert len(text) > WAIFU_BUBBLE_SENTENCE_MAX
+    bubbles = split_waifu_bubbles(text)
+    assert "（笑。真的）" in bubbles[0]
+    assert all("（" not in b or "）" in b for b in bubbles)
+
+    # 【…】 with a comma — the commas inside are opaque too.
+    text2 = ("文字" * 20) + "【保持，不切】" + ("结束" * 20)
+    assert len(text2) > WAIFU_BUBBLE_SENTENCE_MAX
+    assert any("【保持，不切】" in b for b in split_waifu_bubbles(text2))
+
+    # ASCII (…) and […] behave like their fullwidth kin.
+    ascii_text = ("hello " * 12) + "(keep, this together)" + " done"
+    assert len(ascii_text) > WAIFU_BUBBLE_SENTENCE_HARD_MAX
+    ascii_bubbles = split_waifu_bubbles(ascii_text)
+    assert any("(keep, this together)" in b for b in ascii_bubbles)
+    assert all("(" not in b or ")" in b for b in ascii_bubbles)
+
+
+def test_bracketed_interjection_is_not_stranded_alone():
+    """（笑） is 3 chars — it must ride with its neighbours, never a lone micro-bubble."""
+    text = ("well " * 12) + "（笑）" + " done"
+    assert len(text) > WAIFU_BUBBLE_SENTENCE_HARD_MAX
+    bubbles = split_waifu_bubbles(text)
+    assert all(len(b) >= WAIFU_BUBBLE_MIN for b in bubbles)
+    holder = [b for b in bubbles if "（笑）" in b]
+    assert holder and holder[0] != "（笑）"                    # attached to its text, not alone
 
 
 def test_sub_min_sentence_folds_into_previous_bubble():

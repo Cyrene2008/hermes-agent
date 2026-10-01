@@ -491,18 +491,28 @@ WAIFU_BUBBLE_WHITESPACE = " \t\n\r\x0b\x0c\u3000"
 #: would masquerade as an open quote and mute every later cut. ASCII ``"`` is symmetric and toggles.
 WAIFU_BUBBLE_QUOTE_PAIRS = {"「": "」", "『": "』", "“": "”", "‘": "’", '"': '"'}
 
+#: Bracket pairs whose interior must not be cut (same stack opacity as quotes): a parenthetical
+#: behavior span ``（歪着头想了想，轻轻笑）`` is ONE breath — the comma/whitespace fallbacks must never
+#: tear it. ASCII ``<``/``>`` are deliberately absent: in prose they are comparisons, not brackets,
+#: and a stray ``>`` would swallow the rest of the message.
+WAIFU_BUBBLE_BRACKET_PAIRS = {"（": "）", "【": "】", "(": ")", "[": "]"}
 
-def _waifu_sentence_cut_positions(text):
-    """Indices to cut AFTER for sentence breaths — skipping inline-code spans and open quotes.
+#: Every opener → closer pair the breath scanner treats as opaque (quotes + brackets).
+_WAIFU_BUBBLE_OPACITY = {**WAIFU_BUBBLE_QUOTE_PAIRS, **WAIFU_BUBBLE_BRACKET_PAIRS}
 
-    A ``。！？!?；;…`` run inside a ``\\``` inline span or a still-open quote is not a breath, so
-    :data:`WAIFU_BUBBLE_SENTENCE_ENDERS` never tears a code span or a quotation apart.
+
+def _waifu_opaque_mask(text):
+    """Per-index flags: True when the character sits inside a still-open quote/bracket or inline code.
+
+    One left-to-right scan with a LIFO stack of expected closers, shared by the sentence pass and
+    the comma/whitespace fallbacks so ALL of them refuse to cut between an opener and its matcher.
+    Backtick inline spans are opaque too. A closer with no matching opener is ordinary text.
     """
-    positions = []
     n = len(text)
+    mask = [False] * n
     i = 0
     inline_open = 0            # backtick run length that opened the current span; 0 = not in code
-    quote_stack = []
+    stack: "list[str]" = []
     while i < n:
         ch = text[i]
         if ch == '`':
@@ -516,24 +526,43 @@ def _waifu_sentence_cut_positions(text):
             i += run
             continue
         if inline_open:
+            mask[i] = True
             i += 1
             continue
-        closer = WAIFU_BUBBLE_QUOTE_PAIRS.get(ch)
+        closer = _WAIFU_BUBBLE_OPACITY.get(ch)
         if closer is not None:
             if closer == ch:                       # symmetric quote: toggle open/close
-                if quote_stack and quote_stack[-1] == ch:
-                    quote_stack.pop()
+                if stack and stack[-1] == ch:
+                    stack.pop()
                 else:
-                    quote_stack.append(ch)
+                    stack.append(ch)
             else:
-                quote_stack.append(closer)
+                stack.append(closer)
             i += 1
             continue
-        if quote_stack and ch == quote_stack[-1]:
-            quote_stack.pop()
+        if stack and ch == stack[-1]:
+            stack.pop()
             i += 1
             continue
-        if not quote_stack and ch in WAIFU_BUBBLE_SENTENCE_ENDERS:
+        if stack:
+            mask[i] = True                         # inside an open quote/bracket — not a breath
+        i += 1
+    return mask
+
+
+def _waifu_sentence_cut_positions(text):
+    """Indices to cut AFTER for sentence breaths — skipping inline-code and open quote/bracket spans.
+
+    A ``。！？!?；;…`` run inside a ``\\``` inline span, a still-open quote, or a ``（…）`` / ``【…】`` /
+    ``(…)`` / ``[…]`` bracket span is not a breath, so :data:`WAIFU_BUBBLE_SENTENCE_ENDERS` never
+    tears a code span, a quotation or a parenthetical apart.
+    """
+    n = len(text)
+    mask = _waifu_opaque_mask(text)
+    positions = []
+    i = 0
+    while i < n:
+        if not mask[i] and text[i] in WAIFU_BUBBLE_SENTENCE_ENDERS:
             run_end = i + 1
             while run_end < n and text[run_end] in WAIFU_BUBBLE_SENTENCE_ENDERS:
                 run_end += 1
@@ -544,12 +573,16 @@ def _waifu_sentence_cut_positions(text):
     return positions
 
 
-def _waifu_breath_units(text, breakers):
-    """Cut *text* after every char in *breakers* (kept on the left piece); no empty units."""
+def _waifu_breath_units(text, breakers, opaque=None):
+    """Cut *text* after every char in *breakers* (kept on the left piece); no empty units.
+
+    *opaque* (parallel to *text*, from :func:`_waifu_opaque_mask`) marks quote/bracket spans — a
+    breaker there is not a cut, so a comma inside ``（…，…）`` never splits the parenthetical.
+    """
     units = []
     start = 0
     for i, ch in enumerate(text):
-        if ch in breakers:
+        if ch in breakers and not (opaque is not None and opaque[i]):
             units.append(text[start:i + 1])
             start = i + 1
     if start < len(text):
@@ -558,27 +591,42 @@ def _waifu_breath_units(text, breakers):
 
 
 def _waifu_merge_short_units(units):
-    """Fold a sub-``MIN`` unit into the previous one while the pair still fits ``SENTENCE_MAX``."""
-    merged: "list[str]" = []
+    """Pack fragments so no emitted bubble is below ``MIN`` (气泡节奏／分句).
+
+    Lengths are measured on the STRIPPED fragment: ``"mode "`` is 5 raw chars but a 4-char
+    micro-bubble once its separator is trimmed, so a raw-length check still shipped one-word
+    bubbles for a space-delimited sentence (the reported English notice). Adjacent fragments
+    accumulate until the running piece reaches ``MIN``; a fragment still trailing below ``MIN`` —
+    no forward neighbour left — folds back into the previous piece. Only a LONE fragment (the
+    whole text, e.g. an unbreakable blob) may legally stay short.
+    """
+    packed: "list[str]" = []
     for unit in units:
-        if (merged and len(merged[-1]) < WAIFU_BUBBLE_MIN
-                and len(merged[-1]) + len(unit) <= WAIFU_BUBBLE_SENTENCE_MAX):
-            merged[-1] += unit
+        if packed and len(packed[-1].strip()) < WAIFU_BUBBLE_MIN:
+            packed[-1] += unit                      # keep absorbing until the piece reaches MIN
         else:
-            merged.append(unit)
-    return merged
+            packed.append(unit)
+    if len(packed) > 1 and len(packed[-1].strip()) < WAIFU_BUBBLE_MIN:
+        packed[-2] += packed[-1]                    # trailing fragment: fold back, never ship it
+        packed.pop()
+    return packed
 
 
 def _waifu_split_oversize(piece):
-    """Last-resort breath split for a lone sentence over ``HARD_MAX``: commas, then whitespace."""
+    """Last-resort breath split for a lone sentence over ``HARD_MAX``: commas, then whitespace.
+
+    Both fallbacks honour quote/bracket opacity, so a comma inside ``（…，…）`` (or a space inside
+    ``（… …）``) is never a cut — the parenthetical stays whole.
+    """
     if len(piece) <= WAIFU_BUBBLE_SENTENCE_HARD_MAX:
         return [piece]
-    pieces = _waifu_merge_short_units(_waifu_breath_units(piece, WAIFU_BUBBLE_COMMA_BREAKERS))
+    pieces = _waifu_merge_short_units(
+        _waifu_breath_units(piece, WAIFU_BUBBLE_COMMA_BREAKERS, _waifu_opaque_mask(piece)))
     out: "list[str]" = []
     for part in pieces:
         if len(part) > WAIFU_BUBBLE_SENTENCE_HARD_MAX:
             out.extend(_waifu_merge_short_units(
-                _waifu_breath_units(part, WAIFU_BUBBLE_WHITESPACE)))
+                _waifu_breath_units(part, WAIFU_BUBBLE_WHITESPACE, _waifu_opaque_mask(part))))
         else:
             out.append(part)
     return out
