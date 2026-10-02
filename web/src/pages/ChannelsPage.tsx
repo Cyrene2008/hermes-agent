@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import * as QRCode from "qrcode";
+import { useI18n } from "@/i18n";
 import { Badge } from "@nous-research/ui/ui/components/badge";
 import { Button } from "@nous-research/ui/ui/components/button";
 import { Card, CardContent } from "@nous-research/ui/ui/components/card";
@@ -131,6 +132,8 @@ function normalizeWhatsAppMode(mode: unknown): "bot" | "self-chat" | null {
 }
 
 export default function ChannelsPage() {
+  const { t } = useI18n();
+  const C = t.channelsPage;
   const [platforms, setPlatforms] = useState<MessagingPlatform[]>([]);
   const [envPath, setEnvPath] = useState("~/.hermes/.env");
   const [gatewayStartCommand, setGatewayStartCommand] = useState(
@@ -382,7 +385,7 @@ export default function ChannelsPage() {
               size="icon"
               onClick={() => setEditing(null)}
               className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
-              aria-label="Close"
+              aria-label={t.common.close}
             >
               <X />
             </Button>
@@ -422,7 +425,7 @@ export default function ChannelsPage() {
                       <code className="mx-1 font-courier text-xs">/newbot</code>, and
                       follow its prompts.
                     </li>
-                    <li>Copy the complete bot token BotFather gives you.</li>
+                    <li>{C.botTokenHint}</li>
                     <li>
                       Message <span className="text-foreground">@userinfobot</span> to
                       find your numeric Telegram user ID, then add it below for
@@ -664,6 +667,8 @@ function WhatsAppOnboardingPanel({
   setRestartNeeded: (needed: boolean) => void;
   showToast: (message: string, type: "success" | "error") => void;
 }) {
+  const { t } = useI18n();
+  const C = t.channelsPage;
   const configuredMode = useMemo(
     () => normalizeWhatsAppMode(platform.whatsapp_setup?.mode),
     [platform.whatsapp_setup?.mode],
@@ -936,7 +941,7 @@ function WhatsAppOnboardingPanel({
             </div>
           </div>
           <div className="grid min-w-0 flex-1 gap-1.5">
-            <Label htmlFor="whatsapp-allowed-users">Allowed WhatsApp numbers</Label>
+            <Label htmlFor="whatsapp-allowed-users">{C.allowedWhatsappNumbers}</Label>
             <Input
               id="whatsapp-allowed-users"
               value={allowedUsers}
@@ -958,7 +963,7 @@ function WhatsAppOnboardingPanel({
             <div className="grid gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 {phase === "connected" || phase === "applying" ? (
-                  <Badge tone="success">Connected</Badge>
+                  <Badge tone="success">{C.connected}</Badge>
                 ) : (
                   <Badge tone="warning">{setupStatusLabel}</Badge>
                 )}
@@ -986,7 +991,7 @@ function WhatsAppOnboardingPanel({
                     </div>
                     <div className="mt-1 text-muted-foreground">{linkedAccountDetail}</div>
                     <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
-                      <li>Save and restart the gateway.</li>
+                      <li>{C.saveAndRestart}</li>
                       <li>{messageInstruction}</li>
                       <li>{pairingInstruction}</li>
                     </ol>
@@ -1024,12 +1029,12 @@ function WhatsAppOnboardingPanel({
               {qrDataUrl ? (
                 <img
                   src={qrDataUrl}
-                  alt="WhatsApp setup QR code"
+                  alt={C.whatsappQrAlt}
                   className="h-60 w-60 bg-white p-2"
                 />
               ) : phase === "connected" || phase === "applying" ? (
                 <div className="flex h-60 w-60 flex-col items-center justify-center gap-2 border border-border bg-background/50 p-4 text-center">
-                  <Badge tone="success">Linked</Badge>
+                  <Badge tone="success">{C.linked}</Badge>
                   <div className="text-sm text-muted-foreground">
                     {linkedAccountLabel || "Existing WhatsApp session found"}
                   </div>
@@ -1073,6 +1078,8 @@ function TelegramOnboardingPanel({
   setRestartNeeded: (needed: boolean) => void;
   showToast: (message: string, type: "success" | "error") => void;
 }) {
+  const { t } = useI18n();
+  const C = t.channelsPage;
   const [setup, setSetup] = useState<TelegramOnboardingStartResponse | null>(
     null,
   );
@@ -1290,7 +1297,7 @@ function TelegramOnboardingPanel({
             <span className="text-xs font-medium uppercase text-foreground">
               Quick setup
             </span>
-            <Badge tone="success">recommended</Badge>
+            <Badge tone="success">{C.recommended}</Badge>
           </div>
           <p className="text-xs text-muted-foreground">
             Scan a QR code and confirm in Telegram. Hermes creates the bot and
@@ -1355,7 +1362,7 @@ function TelegramOnboardingPanel({
             {(phase === "ready" || phase === "applying") && (
               <div className="grid gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone="success">Ready</Badge>
+                  <Badge tone="success">{C.ready}</Badge>
                   {botUsername && (
                     <span className="font-courier text-sm text-muted-foreground">
                       @{botUsername}
@@ -1369,7 +1376,7 @@ function TelegramOnboardingPanel({
                       Allowed users
                     </span>
                     {detectedOwnerId && allowedIds.includes(detectedOwnerId) && (
-                      <Badge tone="success">owner detected</Badge>
+                      <Badge tone="success">{C.ownerDetected}</Badge>
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1400,7 +1407,7 @@ function TelegramOnboardingPanel({
                   <Input
                     value={newAllowedId}
                     onChange={(event) => setNewAllowedId(event.target.value)}
-                    placeholder="Telegram user ID"
+                    placeholder={C.telegramUserIdPlaceholder}
                     className="font-courier"
                   />
                   <Button size="sm" outlined onClick={addAllowedId} prefix={<Check />}>
@@ -1429,14 +1436,14 @@ function TelegramOnboardingPanel({
           <div className="flex flex-col items-center justify-center gap-3">
             <img
               src={qrDataUrl}
-              alt="Telegram setup QR code"
+              alt={C.telegramQrAlt}
               className="h-56 w-56 bg-white p-2"
             />
             <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
               <Badge tone={expiresIn === "expired" ? "destructive" : "outline"}>
                 {expiresIn}
               </Badge>
-              {phase === "waiting" && <Badge tone="warning">waiting</Badge>}
+              {phase === "waiting" && <Badge tone="warning">{C.waiting}</Badge>}
             </div>
             <div className="flex flex-wrap justify-center gap-2">
               <a
