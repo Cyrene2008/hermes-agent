@@ -392,6 +392,10 @@ export interface Translations {
       auxTaskLabels: Record<string, string>;
       auxTaskHints: Record<string, string>;
     };
+    tokenCacheRead?: string;
+    tokenReasoning?: string;
+    tokenInput?: string;
+    tokenOutput?: string;
   };
 
   /**
