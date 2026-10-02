@@ -70,6 +70,8 @@ export interface Translations {
     gatewayHint?: string;
     pluginLoadFailed: string;
     pluginNotRegistered: string;
+    /** Optional — round-2 sweep; list-type config fields (AutoField). */
+    commaSeparatedPlaceholder?: string;
   };
 
   // ── App shell ──
@@ -282,6 +284,9 @@ export interface Translations {
     sources?: string;
     importSessions?: string;
     importSessionsTitle?: string;
+    // Optional — round-2 leftover sweep.
+    olderThanDays?: string;
+    importSessionsAction?: string;
   };
 
   // ── Analytics page ──
@@ -649,6 +654,11 @@ export interface Translations {
     deleteFolderDescription: string;
     deleteFileDescription: string;
     targetLabel: string;
+    // Optional — round-2 leftover sweep.
+    uploadAction?: string;
+    createAction?: string;
+    go?: string;
+    loadingFiles?: string;
   };
 
 
@@ -762,6 +772,19 @@ export interface Translations {
     editJob?: string;
     jobsTab?: string;
     blueprintsTab?: string;
+    // Optional — round-2 leftover sweep (advanced cron fields).
+    advancedFields?: string;
+    providerLabel?: string;
+    defaultOption?: string;
+    modelLabel?: string;
+    baseUrlOverride?: string;
+    scriptLabel?: string;
+    workdirLabel?: string;
+    profileLabel?: string;
+    allProfilesOption?: string;
+    scriptPlaceholder?: string;
+    contextFromPlaceholder?: string;
+    skillsHint?: string;
   };
 
   // ── Plugins page ──
@@ -1486,6 +1509,8 @@ export interface Translations {
     customKeyNamePlaceholder: string;
     add: string;
     invalidKeyName: string;
+    /** Optional — round-2 sweep; section-nav aria-label. */
+    jumpToSection?: string;
   };
 
   // ── OAuth ──
