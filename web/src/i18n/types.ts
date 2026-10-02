@@ -687,6 +687,7 @@ export interface Translations {
     modelSelect?: string;
     actions?: string;
     manageSkills?: string;
+    build?: string;
     activeSetHint?: string;
   };
 
