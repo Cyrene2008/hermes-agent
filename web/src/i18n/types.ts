@@ -473,6 +473,12 @@ export interface Translations {
     install: string;
     connectedNoTools: string;
     failed: string;
+    // Optional — round-2 leftover sweep.
+    createTitle?: string;
+    browseCatalog?: string;
+    setupNotes?: string;
+    noCatalogEntries?: string;
+    oauthNote?: string;
   };
 
   /** Optional — Pairing page copy. */
@@ -817,6 +823,9 @@ export interface Translations {
     runtimeHeading: string;
     saveProviders: string;
     savedProviders: string;
+    /** Optional — round-2 leftover sweep. */
+    saveMemoryProvider?: string;
+    saveContextEngine?: string;
     sourceBadge: string;
     authRequired: string;
     authRequiredHint: string;
@@ -1214,6 +1223,10 @@ export interface Translations {
     created: string;
     createFailed: string;
     authPrefix: string;
+    // Optional — round-2 leftover sweep.
+    urlLabel?: string;
+    mcpTransportAria?: string;
+    httpAuthAria?: string;
   };
 
   /** Optional — shared component copy. Only en/zh ship it; others fall back. */

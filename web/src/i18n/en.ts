@@ -462,6 +462,11 @@ export const en: Translations = {
     "install": "Install",
     "connectedNoTools": "Connected — no tools",
     "failed": "Failed",
+    "createTitle": "Add MCP server",
+    "browseCatalog": "Browse catalog",
+    "setupNotes": "Setup notes",
+    "noCatalogEntries": "No catalog entries available.",
+    "oauthNote": "Add the server, then use Authenticate. Hermes opens the OAuth browser on the machine running the Dashboard backend.",
   },
 
   pairingPage: {
@@ -881,6 +886,8 @@ export const en: Translations = {
     runtimeHeading: "Gateway runtime (YAML plugins)",
     saveProviders: "Save provider settings",
     savedProviders: "Provider settings saved.",
+    saveMemoryProvider: "Save memory provider",
+    saveContextEngine: "Save context engine",
     sourceBadge: "Source",
     authRequired: "Auth required",
     authRequiredHint: "Run this command to authenticate:",
@@ -1212,6 +1219,9 @@ export const en: Translations = {
     created: "Profile \"{name}\" created",
     createFailed: "Create failed: {error}",
     authPrefix: "auth: ",
+    urlLabel: "URL",
+    mcpTransportAria: "MCP transport",
+    httpAuthAria: "HTTP authentication",
   },
 
   sharedComponents: {
