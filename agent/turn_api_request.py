@@ -15,6 +15,7 @@ from typing import Any
 from agent.audio_routing import strip_unsupported_audio_parts
 from agent.message_sanitization import sanitize_outbound_kwargs, strip_images_for_rejecting_model
 from agent.subagent_hot_reload import refresh_subagent_model
+from hermes_cli.observability.shared_metrics_efficiency import observe_request_tools
 from utils import env_var_enabled
 
 logger = logging.getLogger("agent.conversation_loop")
@@ -126,6 +127,7 @@ def build_api_request(
     # after the fallback-chain redecoration, so it judges the wire actually being used this
     # attempt — a mid-turn fallback to Anthropic/Codex strips what the primary accepted.
     strip_unsupported_audio_parts(agent, api_messages)
+    observe_request_tools(agent, tools_for_api)
     if tools_for_api == agent.tools:
         api_kwargs = agent._build_api_kwargs(api_messages)
     else:
