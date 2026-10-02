@@ -314,6 +314,15 @@ export interface Translations {
     inOut: string;
     /** Optional — "All time" range preset; en/zh seed it, other locales fall back. */
     all?: string;
+    // Optional — round-2 leftover sweep (token-analytics hidden card).
+    hiddenTitle?: string;
+    hiddenBodyOne?: string;
+    hiddenBodyOneSuffix?: string;
+    hiddenBodyTwo?: string;
+    hiddenBodyThreePrefix?: string;
+    hiddenBodyThreeMid?: string;
+    hiddenConfigLink?: string;
+    hiddenBodyThreeSuffix?: string;
   };
 
   // ── Models page ──
@@ -426,6 +435,10 @@ export interface Translations {
     confirmPricingMessage: string;
     modelCount: string;
     pickProvider: string;
+    /** Optional — round-2 leftover sweep. */
+    savesToConfig?: string;
+    openKeys?: string;
+    signInToProvider?: string;
   };
 
   // ── Logs page ──  /** Optional — Files page copy. */
@@ -628,6 +641,22 @@ export interface Translations {
     slackTokenPrefix: string;
     slackMemberIdInvalid: string;
     expired: string;
+    // Optional — round-2 leftover sweep (Telegram/WhatsApp setup blocks).
+    telegramChooseTitle?: string;
+    telegramChooseBody?: string;
+    telegramQuickSetup?: string;
+    telegramQuickSetupBody?: string;
+    telegramUseOwnBot?: string;
+    telegramUseOwnBotBody?: string;
+    telegramManualSetup?: string;
+    telegramAlreadyConfigured?: string;
+    telegramFinishOrCancel?: string;
+    telegramAllowedUsers?: string;
+    telegramAddAtLeastOneUser?: string;
+    telegramOpen?: string;
+    telegramFindMyUserId?: string;
+    whatsappWaitingQr?: string;
+    whatsappScanHint?: string;
   };
 
   filesPage?: {
@@ -1309,6 +1338,11 @@ export interface Translations {
       reasoning: string;
       reasoningNotice: string;
       modelNotice: string;
+      /** Optional — round-2 leftover sweep. */
+      reloadPage?: string;
+      reconnectSidePanel?: string;
+      addKey?: string;
+      switchModel?: string;
     };
   };
 
