@@ -629,6 +629,8 @@ export const en: Translations = {
     modelSaved: "Model updated",
     modelSelect: "Select a model",
     actions: "Actions",
+    manageSkills: "Manage skills & tools",
+    build: "Build",
   },
 
   pluginsPage: {
